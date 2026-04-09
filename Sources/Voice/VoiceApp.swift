@@ -15,7 +15,7 @@ struct VoiceApp: App {
         .menuBarExtraStyle(.window)
 
         Settings {
-            SettingsView(settings: coordinator.settings)
+            SettingsView(settings: coordinator.settings, modelLibrary: coordinator.modelLibrary)
         }
     }
 }

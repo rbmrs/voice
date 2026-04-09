@@ -10,6 +10,7 @@ final class AppCoordinator: ObservableObject {
     @Published private(set) var lastErrorMessage: String?
 
     let settings: AppSettings
+    let modelLibrary: ModelLibrary
 
     private let permissionService: PermissionService
     private let audioCaptureService: AudioCaptureService
@@ -23,6 +24,7 @@ final class AppCoordinator: ObservableObject {
 
     init(
         settings: AppSettings = AppSettings(),
+        modelLibrary: ModelLibrary = ModelLibrary(),
         permissionService: PermissionService = PermissionService(),
         audioCaptureService: AudioCaptureService = AudioCaptureService(),
         transcriber: SpeechTranscribing = WhisperCppTranscriber(),
@@ -32,6 +34,7 @@ final class AppCoordinator: ObservableObject {
         overlayController: OverlayPanelController = OverlayPanelController()
     ) {
         self.settings = settings
+        self.modelLibrary = modelLibrary
         self.permissionService = permissionService
         self.audioCaptureService = audioCaptureService
         self.transcriber = transcriber

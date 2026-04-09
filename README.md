@@ -28,17 +28,24 @@ Example binary locations on Apple Silicon:
 - `whisper-cli`: `/opt/homebrew/bin/whisper-cli`
 - `llama-cli`: `/opt/homebrew/bin/llama-cli`
 
-You still need to download local model files yourself:
-
-- Whisper models: [ggml-org/whisper.cpp](https://github.com/ggml-org/whisper.cpp)
-- GGUF LLM models: any instruct-tuned model compatible with `llama.cpp`
-
 Then open the app settings and provide:
 
 - the `whisper-cli` executable path
-- the local Whisper model path
+- a Whisper model, either by downloading one from the built-in catalog or by browsing to a local `.bin` file
 - optionally the `llama-cli` executable path
-- optionally the local GGUF model path for refinement
+- optionally a GGUF model for refinement, either from the built-in catalog or from a local `.gguf` file
+
+Managed downloads are stored in:
+
+- `~/Library/Application Support/Voice/Models/Whisper`
+- `~/Library/Application Support/Voice/Models/Llama`
+
+The curated in-app catalog currently includes:
+
+- Whisper English and multilingual presets from `whisper.cpp`
+- official Phi-3 Mini GGUF builds for optional `llama.cpp` refinement
+
+Manual local model files still work, which is useful for custom Llama 3.2 or Mistral GGUF setups.
 
 ## Build and run
 
