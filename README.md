@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="voice_logo.png" alt="Voice logo" width="30%">
+</p>
+
 # Voice
 
 `Voice` is a native macOS menu-bar dictation app focused on local-first speech-to-text. It follows the workflow of tools like SuperWhisper or Wispr Flow while keeping transcription and optional cleanup on-device through `whisper.cpp` and `llama.cpp`.
