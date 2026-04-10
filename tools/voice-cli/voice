@@ -1,0 +1,74 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+SOURCE="${BASH_SOURCE[0]}"
+while [ -L "${SOURCE}" ]; do
+  SCRIPT_DIR="$(cd -- "$(dirname -- "${SOURCE}")" && pwd)"
+  TARGET="$(readlink -- "${SOURCE}")"
+  if [[ "${TARGET}" == /* ]]; then
+    SOURCE="${TARGET}"
+  else
+    SOURCE="${SCRIPT_DIR}/${TARGET}"
+  fi
+done
+SCRIPT_DIR="$(cd -- "$(dirname -- "${SOURCE}")" && pwd)"
+
+DEFAULT_ARGS=(
+  --refine "${VOICE_REFINE:-heuristic}"
+  --whisper-timeout "${VOICE_WHISPER_TIMEOUT:-120}"
+)
+if [[ -n "${VOICE_WHISPER_MODEL:-}" ]]; then
+  DEFAULT_ARGS+=(--whisper-model "${VOICE_WHISPER_MODEL}")
+fi
+if [[ -n "${VOICE_LANGUAGE:-}" ]]; then
+  DEFAULT_ARGS+=(--language "${VOICE_LANGUAGE}")
+fi
+if [[ -n "${VOICE_WHISPER_THREADS:-}" ]]; then
+  DEFAULT_ARGS+=(--whisper-threads "${VOICE_WHISPER_THREADS}")
+fi
+if [[ -n "${VOICE_WHISPER_BEAM_SIZE:-}" ]]; then
+  DEFAULT_ARGS+=(--whisper-beam-size "${VOICE_WHISPER_BEAM_SIZE}")
+fi
+if [[ -n "${VOICE_WHISPER_BEST_OF:-}" ]]; then
+  DEFAULT_ARGS+=(--whisper-best-of "${VOICE_WHISPER_BEST_OF}")
+fi
+if [[ "${VOICE_WHISPER_FALLBACK:-0}" =~ ^(1|true|True|yes|Yes)$ ]]; then
+  DEFAULT_ARGS+=(--whisper-fallback)
+fi
+if [[ -n "${VOICE_WHISPER_MAX_CONTEXT:-}" ]]; then
+  DEFAULT_ARGS+=(--whisper-max-context "${VOICE_WHISPER_MAX_CONTEXT}")
+fi
+if [[ "${VOICE_TRIM_SILENCE:-1}" =~ ^(0|false|False|no|No)$ ]]; then
+  DEFAULT_ARGS+=(--no-trim-silence)
+fi
+if [[ -n "${VOICE_TRIM_SILENCE_MS:-}" ]]; then
+  DEFAULT_ARGS+=(--trim-silence-ms "${VOICE_TRIM_SILENCE_MS}")
+fi
+if [[ -n "${VOICE_TRIM_SILENCE_THRESHOLD:-}" ]]; then
+  DEFAULT_ARGS+=(--trim-silence-threshold "${VOICE_TRIM_SILENCE_THRESHOLD}")
+fi
+if [[ -n "${VOICE_MIN_SPEECH_SECONDS:-}" ]]; then
+  DEFAULT_ARGS+=(--min-speech-seconds "${VOICE_MIN_SPEECH_SECONDS}")
+fi
+if [[ "${VOICE_AUTO_PASTE:-1}" =~ ^(0|false|False|no|No)$ ]]; then
+  DEFAULT_ARGS+=(--no-auto-paste)
+fi
+if [[ -n "${VOICE_PASTE_DELAY_MS:-}" ]]; then
+  DEFAULT_ARGS+=(--paste-delay-ms "${VOICE_PASTE_DELAY_MS}")
+fi
+if [[ -n "${VOICE_PASTE_TOOL:-}" ]]; then
+  DEFAULT_ARGS+=(--paste-tool "${VOICE_PASTE_TOOL}")
+fi
+if [[ -n "${VOICE_HOTKEY:-}" ]]; then
+  DEFAULT_ARGS+=(--hotkey "${VOICE_HOTKEY}")
+fi
+
+if [[ "${1:-}" == "hotkey" ]]; then
+  shift
+  exec python3 -B "${SCRIPT_DIR}/voice.py" hotkey "${DEFAULT_ARGS[@]}" "$@"
+fi
+
+exec python3 -B "${SCRIPT_DIR}/voice.py" tui \
+  --seconds "${VOICE_SECONDS:-5}" \
+  "${DEFAULT_ARGS[@]}" \
+  "$@"
