@@ -66,18 +66,18 @@ swift run
 
 ### Linux
 
-See `docs/linux-mvp.md` for the full setup guide. Quick start:
-
 ```bash
-sudo apt install -y git build-essential cmake ninja-build ffmpeg sox xclip xdotool
+bash tools/voice-cli/install.sh
 ```
 
-Build `whisper.cpp` and `llama.cpp` from source (CPU, CUDA, or Vulkan), then:
+Installs system packages, builds `whisper.cpp` with GPU acceleration if available,
+and wires the `voice` command to `~/.local/bin`. Then:
 
 ```bash
-python3 tools/voice-cli/voice.py doctor   # verify dependencies
-voice                                      # launch the TUI
+voice        # launch the TUI
 ```
+
+See `docs/linux-mvp.md` for GPU options, manual steps, and troubleshooting.
 
 ## First-run flow
 
