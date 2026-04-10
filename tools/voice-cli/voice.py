@@ -475,11 +475,11 @@ def copy_to_clipboard(text: str) -> str:
     raise VoiceCliError("Clipboard copy requires wl-copy, xclip, xsel, or an OSC 52-capable terminal.")
 
 
-def auto_paste(delay_ms: int, paste_tool: str = "auto") -> str:
+def auto_paste(delay_ms: int, paste_tool: str = "auto", paste_key: str = "auto") -> str:
     if delay_ms < 0:
         raise VoiceCliError("--paste-delay-ms cannot be negative.")
 
-    command = paste_command(paste_tool)
+    command = paste_command(paste_tool, paste_key)
     ensure_paste_focus(command)
 
     if delay_ms:
@@ -487,7 +487,7 @@ def auto_paste(delay_ms: int, paste_tool: str = "auto") -> str:
 
     try:
         if command[0] == "x11-xtest":
-            paste_with_x11_xtest()
+            paste_with_x11_xtest(paste_key)
             return "x11-xtest"
 
         completed = subprocess.run(
@@ -535,7 +535,7 @@ def ensure_paste_focus(command: Sequence[str]) -> None:
         raise VoiceCliError(f"Auto-paste could not find a focused X11 window: {details}")
 
 
-def paste_command(paste_tool: str) -> list[str]:
+def paste_command(paste_tool: str, paste_key: str = "auto") -> list[str]:
     if paste_tool == "none":
         raise VoiceCliError("Auto-paste is disabled.")
     if paste_tool not in {"auto", "xdotool", "wtype"}:
@@ -548,7 +548,8 @@ def paste_command(paste_tool: str) -> list[str]:
     if paste_tool in {"auto", "xdotool"} and x11:
         xdotool = shutil.which("xdotool")
         if xdotool:
-            return [xdotool, "key", "--clearmodifiers", "ctrl+v"]
+            key = "ctrl+shift+v" if paste_key == "auto" else paste_key
+            return [xdotool, "key", "--clearmodifiers", key]
         if paste_tool == "auto" and can_paste_with_x11_xtest():
             return ["x11-xtest"]
         if paste_tool == "xdotool":
@@ -557,7 +558,8 @@ def paste_command(paste_tool: str) -> list[str]:
     if paste_tool in {"auto", "wtype"} and wayland:
         wtype = shutil.which("wtype")
         if wtype:
-            return [wtype, "-M", "ctrl", "-k", "v", "-m", "ctrl"]
+            key = "ctrl+shift+v" if paste_key == "auto" else paste_key
+            return _wtype_command(wtype, key)
         if paste_tool == "wtype":
             raise VoiceCliError("Auto-paste requires wtype on Wayland.")
 
@@ -566,11 +568,33 @@ def paste_command(paste_tool: str) -> list[str]:
     raise VoiceCliError(f"Auto-paste tool is not usable in this session: {paste_tool}")
 
 
+_WTYPE_KEY_NAMES: dict[str, str] = {
+    "insert": "Insert",
+}
+
+
+def _wtype_command(wtype: str, paste_key: str) -> list[str]:
+    """Build wtype command for a given key combo like ctrl+v or ctrl+shift+v."""
+    parts = paste_key.lower().split("+")
+    raw_key = parts[-1]
+    key = _WTYPE_KEY_NAMES.get(raw_key, raw_key)
+    modifiers = parts[:-1]
+    cmd: list[str] = [wtype]
+    for mod in modifiers:
+        cmd += ["-M", mod]
+    cmd += ["-k", key]
+    for mod in reversed(modifiers):
+        cmd += ["-m", mod]
+    return cmd
+
+
 def can_paste_with_x11_xtest() -> bool:
     return bool(os.environ.get("DISPLAY") and ctypes.util.find_library("X11") and ctypes.util.find_library("Xtst"))
 
 
-def paste_with_x11_xtest() -> None:
+def paste_with_x11_xtest(paste_key: str = "auto") -> None:
+    if paste_key == "auto":
+        paste_key = "ctrl+shift+v"
     x11_name = ctypes.util.find_library("X11")
     xtst_name = ctypes.util.find_library("Xtst")
     if not x11_name or not xtst_name:
@@ -591,22 +615,42 @@ def paste_with_x11_xtest() -> None:
     xtst.XTestFakeKeyEvent.argtypes = [ctypes.c_void_p, ctypes.c_uint, ctypes.c_int, ctypes.c_ulong]
     xtst.XTestFakeKeyEvent.restype = ctypes.c_int
 
+    _XTEST_KEYSYM_NAMES: dict[str, bytes] = {
+        "ctrl": b"Control_L",
+        "shift": b"Shift_L",
+        "alt": b"Alt_L",
+        "super": b"Super_L",
+    }
+
     display = x11.XOpenDisplay(None)
     if not display:
         raise VoiceCliError("Auto-paste could not open the X11 display.")
 
-    try:
-        ctrl_code = int(x11.XKeysymToKeycode(display, x11.XStringToKeysym(b"Control_L")))
-        v_code = int(x11.XKeysymToKeycode(display, x11.XStringToKeysym(b"v")))
-        if ctrl_code == 0 or v_code == 0:
-            raise VoiceCliError("Auto-paste could not resolve Ctrl+V keycodes.")
+    _XTEST_KEY_NAMES: dict[str, bytes] = {
+        "insert": b"Insert",
+    }
 
-        for keycode, is_press in (
-            (ctrl_code, 1),
-            (v_code, 1),
-            (v_code, 0),
-            (ctrl_code, 0),
-        ):
+    try:
+        parts = paste_key.lower().split("+")
+        raw_key = parts[-1]
+        key_name = _XTEST_KEY_NAMES.get(raw_key, raw_key.encode())
+        modifier_names = [_XTEST_KEYSYM_NAMES.get(m) for m in parts[:-1]]
+        if any(n is None for n in modifier_names):
+            unknown = [m for m, n in zip(parts[:-1], modifier_names) if n is None]
+            raise VoiceCliError(f"Auto-paste could not resolve modifier(s): {', '.join(unknown)}")
+
+        modifier_codes = [int(x11.XKeysymToKeycode(display, x11.XStringToKeysym(n))) for n in modifier_names]
+        key_code = int(x11.XKeysymToKeycode(display, x11.XStringToKeysym(key_name)))
+
+        if any(c == 0 for c in modifier_codes) or key_code == 0:
+            raise VoiceCliError(f"Auto-paste could not resolve keycodes for {paste_key}.")
+
+        events: list[tuple[int, int]] = (
+            [(c, 1) for c in modifier_codes]
+            + [(key_code, 1), (key_code, 0)]
+            + [(c, 0) for c in reversed(modifier_codes)]
+        )
+        for keycode, is_press in events:
             if xtst.XTestFakeKeyEvent(display, keycode, is_press, 0) == 0:
                 raise VoiceCliError("Auto-paste failed to send XTest key event.")
         x11.XFlush(display)
@@ -645,7 +689,7 @@ def copy_and_maybe_paste(text: str, args: argparse.Namespace) -> PasteResult:
         return PasteResult(clipboard_tool, None)
 
     try:
-        paste_tool = auto_paste(getattr(args, "paste_delay_ms", 120), getattr(args, "paste_tool", "auto"))
+        paste_tool = auto_paste(getattr(args, "paste_delay_ms", 120), getattr(args, "paste_tool", "auto"), getattr(args, "paste_key", "auto"))
         return PasteResult(clipboard_tool, paste_tool)
     except VoiceCliError as exc:
         return PasteResult(clipboard_tool, None, str(exc))
@@ -2681,6 +2725,12 @@ def add_paste_args(parser: argparse.ArgumentParser) -> None:
         choices=("auto", "xdotool", "wtype"),
         default="auto",
         help="Keyboard injection backend for auto-paste.",
+    )
+    parser.add_argument(
+        "--paste-key",
+        choices=("auto", "ctrl+v", "ctrl+shift+v", "shift+insert"),
+        default="auto",
+        help="Key combo used to paste. auto defaults to ctrl+shift+v; override with ctrl+v for GUI apps.",
     )
 
 
