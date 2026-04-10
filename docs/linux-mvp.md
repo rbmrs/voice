@@ -105,7 +105,7 @@ VOICE_WHISPER_BEAM_SIZE=1
 VOICE_WHISPER_BEST_OF=1
 VOICE_WHISPER_FALLBACK=0
 VOICE_WHISPER_MAX_CONTEXT=0
-VOICE_TRIM_SILENCE=1
+VOICE_TRIM_SILENCE=0
 VOICE_TRIM_SILENCE_MS=250
 VOICE_TRIM_SILENCE_THRESHOLD=-45dB
 VOICE_MIN_SPEECH_SECONDS=0.25
@@ -194,9 +194,25 @@ the `Record Shortcut` state. This is the intended path for Linux Mint Cinnamon
 on X11. Wayland sessions do not permit arbitrary global keyboard grabs; use an
 X11 Cinnamon session or bind a desktop shortcut to a Voice command there.
 
-## Linux Mint Setup
+## Automated Setup
 
-Base packages:
+The recommended path is the install script:
+
+```bash
+bash tools/voice-cli/install.sh
+```
+
+This installs system packages, auto-detects your GPU (NVIDIA CUDA, Vulkan, or CPU+OpenBLAS),
+builds `whisper-cli` from source, and symlinks the `voice` command to `~/.local/bin`.
+Re-run with `--update` to pull the latest whisper.cpp and rebuild.
+
+After setup, launch the TUI and press `M` to download a Whisper model, then `R` to record.
+
+---
+
+## Manual / Advanced Setup
+
+### Linux Mint base packages
 
 ```bash
 sudo apt update
