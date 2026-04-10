@@ -89,3 +89,8 @@ When the configured executable is `llama-cli`, the app automatically uses the si
 - This project is intentionally packaged as a SwiftPM macOS app so it can build in environments that only have Xcode Command Line Tools installed.
 - For a distributable `.app` bundle, wrap the package in an Xcode app target and add `NSMicrophoneUsageDescription` to the generated app's `Info.plist`.
 - The current transcription path uses upstream `whisper.cpp` CLI arguments such as `--model`, `--file`, `--output-txt`, `--output-file`, `--no-prints`, and `--no-timestamps`.
+
+## Linux terminal MVP
+
+The `feature/linux-port-mvp` branch adds a terminal-first Linux prototype under `tools/voice-cli`, including a curses TUI that can be launched with `voice`.
+See `docs/linux-mvp.md` for setup, dependency checks, and the staged Mint porting roadmap.
