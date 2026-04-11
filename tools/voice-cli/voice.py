@@ -342,11 +342,16 @@ def write_voice_config(config: dict[str, object]) -> None:
 
 
 def load_active_whisper_model() -> WhisperModel | None:
-    key = read_voice_config().get("active_whisper_model")
+    config = read_voice_config()
+    key_present = "active_whisper_model" in config
+    key = config.get("active_whisper_model")
     if isinstance(key, str):
         model = model_by_key(key)
         if model and model.path().is_file():
             return model
+        if key_present:
+            return None
+
     downloaded = downloaded_whisper_models()
     for preferred_key in ("large-v3-turbo", "small", "base"):
         preferred = model_by_key(preferred_key)
@@ -1653,6 +1658,12 @@ class TuiView:
         self.language = language
         self.draw()
 
+    def flush_input(self) -> None:
+        try:
+            curses.flushinp()
+        except curses.error:
+            pass
+
     def spin(self, phase: str, detail: str = "") -> None:
         spinner = "|/-\\"
         self.spinner_frame += 1
@@ -1756,11 +1767,7 @@ def delete_tui_model(view: TuiView, model_state: TuiModelState, model: WhisperMo
     if model_state.active == model:
         model_state.active = None
         clear_active_whisper_model()
-        next_models = downloaded_whisper_models()
-        if next_models:
-            activate_tui_model(view, model_state, next_models[0])
-        else:
-            view.set_model_state(model_state)
+        view.set_model_state(model_state)
 
     view.add_log(f"Deleted Whisper model: {model.display_name}.")
 
@@ -1799,6 +1806,19 @@ def run_model_manager(view: TuiView, model_state: TuiModelState) -> None:
     selected = 0
     downloads: dict[str, DownloadState] = {}
     download_threads: dict[str, threading.Thread] = {}
+
+    view.flush_input()
+
+    if model_state.active:
+        for index, model in enumerate(WHISPER_MODEL_CATALOG):
+            if model_state.active == model:
+                selected = index
+                break
+    elif model_state.custom_path:
+        for index, model in enumerate(WHISPER_MODEL_CATALOG):
+            if model.path() == model_state.custom_path:
+                selected = index
+                break
 
     def start_download(model: WhisperModel) -> None:
         if model.path().is_file():
@@ -1876,6 +1896,7 @@ def run_model_manager(view: TuiView, model_state: TuiModelState) -> None:
             time.sleep(0.1)
             continue
         if key in (ord("q"), ord("Q"), 27):
+            view.flush_input()
             view.draw()
             return
         if key in (curses.KEY_UP, ord("k"), ord("K")):
@@ -1908,6 +1929,7 @@ def run_model_manager(view: TuiView, model_state: TuiModelState) -> None:
 def run_language_manager(view: TuiView, args: argparse.Namespace) -> None:
     screen = view.screen
     selected = 0
+    view.flush_input()
     for index, option in enumerate(LANGUAGE_OPTIONS):
         if option.code == args.language:
             selected = index
@@ -1942,6 +1964,7 @@ def run_language_manager(view: TuiView, args: argparse.Namespace) -> None:
             time.sleep(0.1)
             continue
         if key in (ord("q"), ord("Q"), 27):
+            view.flush_input()
             view.draw()
             return
         if key in (curses.KEY_UP, ord("k"), ord("K")):
@@ -1956,6 +1979,7 @@ def run_language_manager(view: TuiView, args: argparse.Namespace) -> None:
             save_language(language)
             view.set_language(language)
             view.add_log(f"Language set to {language_label(language)}.")
+            view.flush_input()
             view.draw()
             return
 
@@ -1998,6 +2022,7 @@ def capture_tui_audio_toggle(
     should_stop: Callable[[], bool],
 ) -> Path:
     view.set_phase("Starting recorder", f"backend={args.backend}")
+    view.flush_input()
     session = start_recording_session(audio_path, args.backend)
     view.add_log(f"Recording with {session.backend_name}. Press r to stop.")
 
@@ -2008,9 +2033,11 @@ def capture_tui_audio_toggle(
         key = view.screen.getch()
         if should_stop() or key in (ord("r"), ord("R"), ord("\n"), curses.KEY_ENTER):
             view.add_log("Stopping recording.")
+            view.flush_input()
             break
         if key in (ord("q"), ord("Q")):
             stop_recording(session.process)
+            view.flush_input()
             raise VoiceCliError("Recording cancelled.")
         if session.process.poll() is not None:
             view.add_log("Recorder stopped.")
@@ -2034,6 +2061,7 @@ def run_tui_pipeline(
     if whisper_model is None or not whisper_model.is_file():
         raise VoiceCliError("No active Whisper model. Press M to download and activate one.")
 
+    view.flush_input()
     view.output = ""
     view.add_log("Starting pipeline.")
     view.add_log(f"Whisper model: {model_state.active_label()} ({whisper_model})")
@@ -2132,6 +2160,7 @@ def run_tui_pipeline(
         view.add_log(str(exc))
 
     view.add_log("Pipeline complete.")
+    view.flush_input()
     return final_text
 
 
@@ -2189,6 +2218,7 @@ def run_tui_screen(
                     view.add_log(f"Error: {exc}")
                 finally:
                     hotkey_event.clear()
+                    view.flush_input()
 
                 if args.once:
                     time.sleep(args.hold_seconds)
