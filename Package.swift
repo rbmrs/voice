@@ -7,7 +7,7 @@ let package = Package(
         .macOS(.v14),
     ],
     products: [
-        .executable(name: "Voice", targets: ["Voice"]),
+        .executable(name: "voice", targets: ["Voice"]),
     ],
     dependencies: [
         .package(url: "https://github.com/sindresorhus/KeyboardShortcuts", exact: "1.9.4"),
