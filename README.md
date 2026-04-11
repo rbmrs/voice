@@ -28,9 +28,12 @@
 - Curses TUI launchable with the `voice` command
 - Toggle recording with `R` — start, stop, transcribe, refine in one keystroke
 - X11 global hotkey daemon (`voice hotkey`) for hands-free trigger from any window
-- Auto-paste into the focused window via `xdotool` (X11) or `wtype` (Wayland)
+- Wayland daemon mode with portal shortcuts (`voice daemon`) and external-trigger fallback (`voice trigger`)
+- User service helpers via `voice service ...` and environment/session diagnostics via `voice shortcut-status`
+- Auto-paste into the focused window via `xdotool` on X11; Wayland defaults to copy-only unless explicitly opted in
 - Clipboard copy through `wl-copy`, `xclip`, `xsel`, or OSC 52
 - In-TUI Whisper model manager — browse, download, activate, and delete models
+- One-shot install and reset workflows through `tools/voice-cli/install.sh`
 - Configurable via environment variables (`VOICE_*`) or `~/.config/voice/config.json`
 
 ### Shared
@@ -71,11 +74,22 @@ bash tools/voice-cli/install.sh
 ```
 
 Installs system packages through `apt` or `dnf`, builds `whisper.cpp` with GPU
-acceleration if available, and wires the `voice` command to `~/.local/bin`.
+acceleration if available, downloads and activates the `small` Whisper model,
+installs the desktop entry and systemd user service, and wires the `voice`
+command to `~/.local/bin`.
+
 Then:
 
 ```bash
 voice        # launch the TUI
+```
+
+Useful installer variants:
+
+```bash
+bash tools/voice-cli/install.sh --reset --dry-run
+bash tools/voice-cli/install.sh --reset
+bash tools/voice-cli/install.sh --reset --remove-packages
 ```
 
 See `docs/linux-mvp.md` for GPU options, manual steps, and troubleshooting.
@@ -94,9 +108,10 @@ See `docs/linux-mvp.md` for GPU options, manual steps, and troubleshooting.
 ### Linux
 
 1. Run `python3 tools/voice-cli/voice.py doctor` to check runtime dependencies.
-2. Launch the TUI with `voice`.
-3. Press `M` to open the model manager and download a Whisper model.
+2. Run `voice shortcut-status` to confirm the detected backend and service state.
+3. Launch the TUI with `voice`.
 4. Press `R` to start recording, `R` again to stop.
+5. Press `M` only if you want to switch away from the installer's default model.
 
 ## Model management
 
@@ -116,7 +131,12 @@ Models are stored in:
 - `~/.local/share/voice/models/whisper`
 - `~/.local/share/voice/models/llama`
 
-The in-TUI model manager (press `M`) lists Tiny, Base, Small, Medium, Large v3 Turbo, and Large v3 models from the `ggerganov/whisper.cpp` Hugging Face repository. Press `D` to download, `A` to activate, and `X` to delete. The active model is saved to `~/.config/voice/config.json`.
+The installer defaults to the `small` Whisper model for faster first-time setup.
+The in-TUI model manager (press `M`) lists Tiny, Base, Small, Medium, Large v3
+Turbo, and Large v3 models from the `ggerganov/whisper.cpp` Hugging Face
+repository. Press `D` to download, `A` to activate, and `X` to delete. The
+active model is saved to `~/.config/voice/config.json`. You can also install a
+model non-interactively with `voice model-install`.
 
 ## Refinement behavior
 
@@ -134,4 +154,5 @@ On Linux, `llama-completion` is used automatically when it exists beside `llama-
 - This project is intentionally packaged as a SwiftPM macOS app so it can build in environments that only have Xcode Command Line Tools installed.
 - For a distributable `.app` bundle, wrap the package in an Xcode app target and add `NSMicrophoneUsageDescription` to the generated app's `Info.plist`.
 - The current transcription path uses upstream `whisper.cpp` CLI arguments such as `--model`, `--file`, `--output-txt`, `--output-file`, `--no-prints`, and `--no-timestamps`.
-- On Linux, the built-in global hotkey uses X11 `XGrabKey` and does not require root access. Wayland does not allow arbitrary global keyboard grabs, so on Wayland you should use a compositor or desktop-environment shortcut to launch a `voice` command instead.
+- On Linux, the built-in global hotkey uses X11 `XGrabKey` and does not require root access. Wayland does not allow arbitrary global keyboard grabs, so the Wayland path runs through `voice daemon`: it prefers the XDG GlobalShortcuts portal when available and otherwise falls back to binding your desktop shortcut to `voice trigger --action toggle`.
+- On Wayland, clipboard copy is the default and keyboard injection is opt-in. This avoids unexpected Remote Desktop / input-injection permission prompts on desktops that gate synthetic typing.
