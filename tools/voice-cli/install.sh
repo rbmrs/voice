@@ -34,6 +34,8 @@ WHISPER_BIN="${WHISPER_BUILD_DIR}/bin/whisper-cli"
 LOCAL_BIN="${HOME}/.local/bin"
 VOICE_WRAPPER="${REPO_ROOT}/tools/voice-cli/voice"
 WHISPER_REPO="https://github.com/ggerganov/whisper.cpp.git"
+PACKAGE_MANAGER=""
+DISTRO_LABEL=""
 
 # ---------------------------------------------------------------------------
 # Argument parsing
@@ -82,22 +84,36 @@ die()   { printf "${_tty_bold}\033[31m[voice] error:${_tty_reset} %s\n" "$*" >&2
 # ---------------------------------------------------------------------------
 # check_prerequisites
 # ---------------------------------------------------------------------------
+detect_package_manager() {
+  if command -v apt-get &>/dev/null; then
+    PACKAGE_MANAGER="apt"
+    DISTRO_LABEL="apt-based distro"
+    return 0
+  fi
+
+  if command -v dnf &>/dev/null; then
+    PACKAGE_MANAGER="dnf"
+    DISTRO_LABEL="Fedora-like distro"
+    return 0
+  fi
+
+  die "Unsupported Linux package manager. Expected apt-get or dnf."
+}
+
 check_prerequisites() {
   step "Checking prerequisites..."
 
-  if [[ ! -f /etc/debian_version ]] && ! command -v apt-get &>/dev/null; then
-    die "This script requires an apt-based Linux distro (Ubuntu, Debian, Mint, etc.)."
-  fi
+  detect_package_manager
 
   if ! command -v python3 &>/dev/null; then
-    die "python3 is required but not found. Install it first: sudo apt install python3"
+    die "python3 is required but not found. Install it with your system package manager first."
   fi
 
   if ! command -v git &>/dev/null; then
-    die "git is required but not found. Install it first: sudo apt install git"
+    die "git is required but not found. Install it with your system package manager first."
   fi
 
-  ok "Prerequisites OK"
+  ok "Prerequisites OK (${DISTRO_LABEL})"
 }
 
 # ---------------------------------------------------------------------------
@@ -122,6 +138,28 @@ install_apt_packages() {
   sudo apt-get install -y --no-upgrade "${packages[@]}"
 
   ok "System packages installed"
+}
+
+install_dnf_packages() {
+  step "Installing system packages..."
+
+  local packages=(
+    git gcc gcc-c++ make cmake ninja-build pkgconf-pkg-config ccache curl wget
+    ffmpeg-free sox wl-clipboard xclip xdotool wtype python3
+    openblas-devel pipewire-utils alsa-utils
+  )
+
+  sudo dnf install -y "${packages[@]}"
+
+  ok "System packages installed"
+}
+
+install_system_packages() {
+  case "${PACKAGE_MANAGER}" in
+    apt) install_apt_packages ;;
+    dnf) install_dnf_packages ;;
+    *) die "Unsupported package manager: ${PACKAGE_MANAGER}" ;;
+  esac
 }
 
 # ---------------------------------------------------------------------------
@@ -289,7 +327,7 @@ main() {
   echo ""
 
   check_prerequisites
-  install_apt_packages
+  install_system_packages
   detect_gpu
   build_whisper_cpp
   install_symlinks
