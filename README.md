@@ -70,8 +70,9 @@ swift run
 bash tools/voice-cli/install.sh
 ```
 
-Installs system packages, builds `whisper.cpp` with GPU acceleration if available,
-and wires the `voice` command to `~/.local/bin`. Then:
+Installs system packages through `apt` or `dnf`, builds `whisper.cpp` with GPU
+acceleration if available, and wires the `voice` command to `~/.local/bin`.
+Then:
 
 ```bash
 voice        # launch the TUI

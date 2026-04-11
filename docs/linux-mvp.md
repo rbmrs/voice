@@ -202,9 +202,10 @@ The recommended path is the install script:
 bash tools/voice-cli/install.sh
 ```
 
-This installs system packages, auto-detects your GPU (NVIDIA CUDA, Vulkan, or CPU+OpenBLAS),
-builds `whisper-cli` from source, and symlinks the `voice` command to `~/.local/bin`.
-Re-run with `--update` to pull the latest whisper.cpp and rebuild.
+This installs system packages through `apt` or `dnf`, auto-detects your GPU
+(NVIDIA CUDA, Vulkan, or CPU+OpenBLAS), builds `whisper-cli` from source, and
+symlinks the `voice` command to `~/.local/bin`. Re-run with `--update` to pull
+the latest whisper.cpp and rebuild.
 
 After setup, launch the TUI and press `M` to download a Whisper model, then `R` to record.
 
@@ -228,6 +229,22 @@ Vulkan path, recommended first for AMD GPUs and Steam Deck-class hardware:
 
 ```bash
 sudo apt install -y libvulkan-dev vulkan-tools glslc
+vulkaninfo
+```
+
+### Fedora base packages
+
+```bash
+sudo dnf install -y \
+  git gcc gcc-c++ make cmake ninja-build pkgconf-pkg-config ccache curl wget \
+  ffmpeg-free sox wl-clipboard xclip xdotool wtype \
+  python3 openblas-devel pipewire-utils alsa-utils
+```
+
+Vulkan path:
+
+```bash
+sudo dnf install -y vulkan-tools glslc
 vulkaninfo
 ```
 
