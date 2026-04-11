@@ -14,6 +14,9 @@ done
 SCRIPT_DIR="$(cd -- "$(dirname -- "${SOURCE}")" && pwd)"
 
 DOCTOR_ARGS=()
+SOCKET_ARGS=()
+SHORTCUT_ARGS=()
+DAEMON_SHORTCUT_ARGS=()
 PIPELINE_ARGS=(
   --refine "${VOICE_REFINE:-heuristic}"
   --whisper-timeout "${VOICE_WHISPER_TIMEOUT:-120}"
@@ -64,7 +67,9 @@ fi
 if [[ -n "${VOICE_MIN_SPEECH_SECONDS:-}" ]]; then
   PIPELINE_ARGS+=(--min-speech-seconds "${VOICE_MIN_SPEECH_SECONDS}")
 fi
-if [[ "${VOICE_AUTO_PASTE:-1}" =~ ^(0|false|False|no|No)$ ]]; then
+if [[ "${VOICE_AUTO_PASTE:-}" =~ ^(1|true|True|yes|Yes)$ ]]; then
+  PIPELINE_ARGS+=(--auto-paste)
+elif [[ "${VOICE_AUTO_PASTE:-}" =~ ^(0|false|False|no|No)$ ]]; then
   PIPELINE_ARGS+=(--no-auto-paste)
 fi
 if [[ -n "${VOICE_PASTE_DELAY_MS:-}" ]]; then
@@ -74,12 +79,19 @@ if [[ -n "${VOICE_PASTE_TOOL:-}" ]]; then
   PIPELINE_ARGS+=(--paste-tool "${VOICE_PASTE_TOOL}")
 fi
 if [[ -n "${VOICE_HOTKEY:-}" ]]; then
-  PIPELINE_ARGS+=(--hotkey "${VOICE_HOTKEY}")
+  SHORTCUT_ARGS+=(--hotkey "${VOICE_HOTKEY}")
+  DAEMON_SHORTCUT_ARGS+=(--hotkey "${VOICE_HOTKEY}")
+fi
+if [[ -n "${VOICE_SOCKET_PATH:-}" ]]; then
+  SOCKET_ARGS+=(--socket-path "${VOICE_SOCKET_PATH}")
+fi
+if [[ -n "${VOICE_SHORTCUT_BACKEND:-}" ]]; then
+  DAEMON_SHORTCUT_ARGS+=(--shortcut-backend "${VOICE_SHORTCUT_BACKEND}")
 fi
 
 COMMAND="${1:-tui}"
 case "${COMMAND}" in
-  doctor|record|transcribe|refine|run|tui|hotkey)
+  doctor|record|transcribe|refine|model-install|run|tui|hotkey|daemon|trigger|service|shortcut-status)
     shift || true
     ;;
   *)
@@ -97,8 +109,17 @@ case "${COMMAND}" in
   doctor)
     DEFAULT_ARGS=("${DOCTOR_ARGS[@]}")
     ;;
-  run|tui|hotkey)
+  run)
     DEFAULT_ARGS=("${PIPELINE_ARGS[@]}")
+    ;;
+  tui|hotkey)
+    DEFAULT_ARGS=("${PIPELINE_ARGS[@]}" "${SHORTCUT_ARGS[@]}")
+    ;;
+  daemon)
+    DEFAULT_ARGS=("${PIPELINE_ARGS[@]}" "${SOCKET_ARGS[@]}" "${DAEMON_SHORTCUT_ARGS[@]}")
+    ;;
+  trigger)
+    DEFAULT_ARGS=("${SOCKET_ARGS[@]}")
     ;;
 esac
 
