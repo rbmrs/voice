@@ -14,6 +14,8 @@ import re
 import shlex
 import shutil
 import signal
+import socket
+import stat
 import subprocess
 import sys
 import tempfile
@@ -144,6 +146,14 @@ class PasteResult:
     clipboard_tool: str
     paste_tool: str | None
     paste_error: str | None = None
+
+
+@dataclass(frozen=True)
+class PipelineResources:
+    whisper_model: Path
+    whisper_cli: Path
+    llama_model: Path | None
+    llama_cli: Path | None
 
 
 class XKeyEvent(ctypes.Structure):
@@ -451,9 +461,16 @@ def resolve_language(configured: str | None) -> str:
     return configured if configured else load_language()
 
 
+def wayland_session_active() -> bool:
+    session_type = os.environ.get("XDG_SESSION_TYPE", "").lower()
+    return session_type == "wayland" or bool(os.environ.get("WAYLAND_DISPLAY"))
+
+
 def load_auto_paste() -> bool:
     value = read_voice_config().get("auto_paste")
-    return value if isinstance(value, bool) else True
+    if isinstance(value, bool):
+        return value
+    return not wayland_session_active()
 
 
 def save_auto_paste(enabled: bool) -> None:
@@ -556,27 +573,62 @@ def initial_tui_model_state(configured: str | None) -> TuiModelState:
     return TuiModelState(active=load_active_whisper_model())
 
 
+def default_runtime_dir() -> Path:
+    runtime_dir = os.environ.get("XDG_RUNTIME_DIR")
+    if runtime_dir:
+        return Path(runtime_dir).expanduser() / "voice"
+    return Path(tempfile.gettempdir()) / f"voice-{os.getuid()}"
+
+
+def default_socket_path() -> Path:
+    return default_runtime_dir() / "voice.sock"
+
+
+def resolve_socket_path(configured: str | None) -> Path:
+    if configured:
+        path = expand_path(configured)
+        if path is None:
+            raise VoiceCliError("Socket path is empty.")
+        return path
+    return default_socket_path()
+
+
+def resolve_pipeline_resources(args: argparse.Namespace) -> PipelineResources:
+    whisper_model = resolve_whisper_model(args.whisper_model)
+    whisper_cli = resolve_executable(args.whisper_cli, ("whisper-cli",))
+    if args.refine == "llama" and not args.llama_model:
+        raise VoiceCliError("--llama-model is required when --refine llama is selected.")
+    llama_model = require_file(args.llama_model, "Llama model") if args.refine == "llama" else None
+    llama_cli = resolve_executable(args.llama_cli, ("llama-cli", "llama-completion")) if args.refine == "llama" else None
+    return PipelineResources(whisper_model, whisper_cli, llama_model, llama_cli)
+
+
 def copy_to_clipboard(text: str) -> str:
     wl_copy = shutil.which("wl-copy")
     if wl_copy:
         try:
-            completed = subprocess.run(
+            process = subprocess.Popen(
                 [wl_copy],
-                input=text,
+                stdin=subprocess.PIPE,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
                 text=True,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
-                timeout=5,
-                check=False,
+                start_new_session=True,
             )
-        except (OSError, subprocess.TimeoutExpired) as exc:
+            assert process.stdin is not None
+            process.stdin.write(text)
+            process.stdin.close()
+            time.sleep(0.2)
+        except OSError as exc:
             raise VoiceCliError(f"Clipboard copy failed using wl-copy: {exc}") from exc
 
-        if completed.returncode == 0:
+        # wl-copy may stay alive to own the clipboard selection. That is success.
+        if process.poll() is None:
             return "wl-copy"
 
-        details = completed.stderr.strip() or completed.stdout.strip() or f"exit code {completed.returncode}"
-        raise VoiceCliError(f"Clipboard copy failed using wl-copy: {details}")
+        if process.returncode == 0:
+            return "wl-copy"
+        raise VoiceCliError(f"Clipboard copy failed using wl-copy: exit code {process.returncode}")
 
     for name, command in [
         ("xclip", ["xclip", "-selection", "clipboard"]),
@@ -729,19 +781,8 @@ def paste_command(paste_tool: str, paste_key: str = "auto") -> list[str]:
     if paste_tool not in {"auto", "xdotool", "wtype"}:
         raise VoiceCliError(f"Unsupported paste tool: {paste_tool}")
 
-    session_type = os.environ.get("XDG_SESSION_TYPE", "").lower()
-    wayland = session_type == "wayland" or bool(os.environ.get("WAYLAND_DISPLAY"))
+    wayland = wayland_session_active()
     x11 = bool(os.environ.get("DISPLAY"))
-
-    if paste_tool in {"auto", "xdotool"} and x11:
-        xdotool = shutil.which("xdotool")
-        if xdotool:
-            key = _detect_paste_key_x11(xdotool) if paste_key == "auto" else paste_key
-            return [xdotool, "key", "--clearmodifiers", key]
-        if paste_tool == "auto" and can_paste_with_x11_xtest():
-            return ["x11-xtest"]
-        if paste_tool == "xdotool":
-            raise VoiceCliError("Auto-paste requires xdotool on X11.")
 
     if paste_tool in {"auto", "wtype"} and wayland:
         wtype = shutil.which("wtype")
@@ -750,6 +791,16 @@ def paste_command(paste_tool: str, paste_key: str = "auto") -> list[str]:
             return _wtype_command(wtype, key)
         if paste_tool == "wtype":
             raise VoiceCliError("Auto-paste requires wtype on Wayland.")
+
+    if paste_tool in {"auto", "xdotool"} and x11 and not wayland:
+        xdotool = shutil.which("xdotool")
+        if xdotool:
+            key = _detect_paste_key_x11(xdotool) if paste_key == "auto" else paste_key
+            return [xdotool, "key", "--clearmodifiers", key]
+        if paste_tool == "auto" and can_paste_with_x11_xtest():
+            return ["x11-xtest"]
+        if paste_tool == "xdotool":
+            raise VoiceCliError("Auto-paste requires xdotool on X11.")
 
     if paste_tool == "auto":
         raise VoiceCliError("Auto-paste requires xdotool on X11 or wtype on Wayland.")
@@ -1610,16 +1661,21 @@ def command_doctor(args: argparse.Namespace) -> int:
         checks.append(("llama model", ok, str(path)))
 
     active_model = load_active_whisper_model()
+    session_label = "Wayland" if wayland_session_active() else "X11" if os.environ.get("DISPLAY") else "headless"
     print(f"Model root: {model_root}")
     print(f"Active Whisper model: {active_model.display_name if active_model else 'none'}")
+    print(f"Session: {session_label}")
     print(f"Global hotkey: {load_hotkey()}")
     print(f"Language: {language_label(load_language())}")
     print(f"CPU threads: {os.cpu_count() or 'unknown'}")
+    print(f"Auto-paste default: {'off' if wayland_session_active() else 'on'}")
     if whisper_cli_path:
         backend = whisper_backend_summary(whisper_cli_path)
         print(f"Whisper backend: {backend}")
         if backend == "CPU-only" and (os.cpu_count() or 0) <= 4:
             print("Recommendation: use Large v3 Turbo, Small, or Base for interactive latency; avoid Medium/Large v3 on CPU-only slow machines.")
+    if wayland_session_active():
+        print("Wayland note: copy-only is safest. `wtype` auto-paste requires compositor virtual keyboard support and may fail.")
     print("Whisper catalog:")
     for model in WHISPER_MODEL_CATALOG:
         state = "downloaded" if model.path().is_file() else "available"
@@ -2956,72 +3012,215 @@ def run_finished_audio_pipeline(
     return final_text
 
 
+class DictationController:
+    def __init__(self, args: argparse.Namespace, resources: PipelineResources) -> None:
+        self.args = args
+        self.resources = resources
+        self.lock = threading.Lock()
+        self.session: RecordingSession | None = None
+        self.temp_dir: tempfile.TemporaryDirectory[str] | None = None
+        self.processing = False
+
+    def state_label(self) -> str:
+        with self.lock:
+            if self.processing:
+                return "processing"
+            if self.session is not None:
+                return "recording"
+            return "idle"
+
+    def status_message(self) -> str:
+        with self.lock:
+            if self.processing:
+                return "Voice: processing last recording."
+            if self.session is not None:
+                return f"Voice: recording with {self.session.backend_name}."
+            return "Voice: idle."
+
+    def start(self) -> str:
+        with self.lock:
+            if self.processing:
+                return "Voice: still processing; start ignored."
+            if self.session is not None:
+                return f"Voice: already recording with {self.session.backend_name}."
+
+            temp_dir = tempfile.TemporaryDirectory(prefix="voice-hotkey-audio-")
+            audio_path = Path(temp_dir.name) / "recording.wav"
+            try:
+                session = start_recording_session(audio_path, self.args.backend)
+            except BaseException:
+                temp_dir.cleanup()
+                raise
+
+            self.temp_dir = temp_dir
+            self.session = session
+            return f"Voice: recording started with {session.backend_name}."
+
+    def stop(self) -> str:
+        with self.lock:
+            if self.processing:
+                return "Voice: still processing; stop ignored."
+            if self.session is None:
+                return "Voice: already idle."
+
+            active_session = self.session
+            active_temp_dir = self.temp_dir
+            self.session = None
+            self.temp_dir = None
+            self.processing = True
+
+        assert active_temp_dir is not None
+        threading.Thread(
+            target=self.finish_in_background,
+            args=(active_session, active_temp_dir),
+            daemon=True,
+        ).start()
+        return "Voice: recording stopped; processing..."
+
+    def toggle(self) -> str:
+        with self.lock:
+            should_start = self.session is None
+        if should_start:
+            return self.start()
+        return self.stop()
+
+    def shutdown(self) -> None:
+        with self.lock:
+            active_session = self.session
+            active_temp_dir = self.temp_dir
+            self.session = None
+            self.temp_dir = None
+
+        if active_session is not None:
+            try:
+                active_session.process.terminate()
+                active_session.process.wait(timeout=1)
+            except (OSError, subprocess.TimeoutExpired):
+                pass
+        if active_temp_dir is not None:
+            active_temp_dir.cleanup()
+
+    def finish_in_background(
+        self,
+        active_session: RecordingSession,
+        active_temp_dir: tempfile.TemporaryDirectory[str],
+    ) -> None:
+        try:
+            audio_path = finish_recording_session(active_session)
+            run_finished_audio_pipeline(
+                audio_path,
+                self.args,
+                self.resources.whisper_model,
+                self.resources.whisper_cli,
+                self.resources.llama_model,
+                self.resources.llama_cli,
+            )
+        except BaseException as exc:
+            print(f"Voice: {exc}", file=sys.stderr, flush=True)
+        finally:
+            active_temp_dir.cleanup()
+            with self.lock:
+                self.processing = False
+
+
+def prepare_server_socket(socket_path: Path) -> None:
+    socket_path.parent.mkdir(parents=True, exist_ok=True)
+
+    if not socket_path.exists():
+        return
+
+    mode = socket_path.stat().st_mode
+    if not stat.S_ISSOCK(mode):
+        raise VoiceCliError(f"Socket path exists and is not a socket: {socket_path}")
+
+    try:
+        with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as probe:
+            probe.settimeout(0.2)
+            probe.connect(str(socket_path))
+    except OSError:
+        socket_path.unlink()
+        return
+
+    raise VoiceCliError(f"Voice daemon already running at {socket_path}")
+
+
+def daemon_response(status_value: str, state: str, message: str) -> bytes:
+    payload = {"status": status_value, "state": state, "message": message}
+    return (json.dumps(payload) + "\n").encode("utf-8")
+
+
+def handle_daemon_connection(connection: socket.socket, controller: DictationController) -> None:
+    with connection:
+        connection.settimeout(2)
+        data = b""
+        while not data.endswith(b"\n") and len(data) < 4096:
+            chunk = connection.recv(4096)
+            if not chunk:
+                break
+            data += chunk
+
+        try:
+            request = json.loads(data.decode("utf-8") or "{}")
+        except json.JSONDecodeError:
+            connection.sendall(daemon_response("error", controller.state_label(), "Invalid daemon request."))
+            return
+
+        action = request.get("action", "toggle")
+        if action == "toggle":
+            message = controller.toggle()
+        elif action == "start":
+            message = controller.start()
+        elif action == "stop":
+            message = controller.stop()
+        elif action == "status":
+            message = controller.status_message()
+        else:
+            connection.sendall(daemon_response("error", controller.state_label(), f"Unsupported action: {action}"))
+            return
+
+        connection.sendall(daemon_response("ok", controller.state_label(), message))
+
+
+def send_daemon_request(socket_path: Path, action: str) -> tuple[str, str, str]:
+    request = json.dumps({"action": action}).encode("utf-8") + b"\n"
+
+    try:
+        with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as client:
+            client.settimeout(3)
+            client.connect(str(socket_path))
+            client.sendall(request)
+            data = b""
+            while not data.endswith(b"\n") and len(data) < 4096:
+                chunk = client.recv(4096)
+                if not chunk:
+                    break
+                data += chunk
+    except OSError as exc:
+        raise VoiceCliError(f"Could not reach Voice daemon at {socket_path}: {exc}") from exc
+
+    try:
+        response = json.loads(data.decode("utf-8") or "{}")
+    except json.JSONDecodeError as exc:
+        raise VoiceCliError("Voice daemon returned an invalid response.") from exc
+
+    status_value = response.get("status")
+    message = response.get("message")
+    state = response.get("state")
+
+    if not isinstance(status_value, str) or not isinstance(message, str):
+        raise VoiceCliError("Voice daemon returned an incomplete response.")
+    if not isinstance(state, str):
+        state = "unknown"
+    return status_value, state, message
+
+
 def command_hotkey(args: argparse.Namespace) -> int:
     require_x11_session()
     apply_runtime_settings(args)
     args.hotkey = resolve_hotkey(args.hotkey)
     args.language = resolve_language(args.language)
-    whisper_model = resolve_whisper_model(args.whisper_model)
-    whisper_cli = resolve_executable(args.whisper_cli, ("whisper-cli",))
-    if args.refine == "llama" and not args.llama_model:
-        raise VoiceCliError("--llama-model is required when --refine llama is selected.")
-    llama_model = require_file(args.llama_model, "Llama model") if args.refine == "llama" else None
-    llama_cli = resolve_executable(args.llama_cli, ("llama-cli", "llama-completion")) if args.refine == "llama" else None
-
-    lock = threading.Lock()
-    session: RecordingSession | None = None
-    temp_dir: tempfile.TemporaryDirectory[str] | None = None
-    processing = False
-
-    def finish_in_background(active_session: RecordingSession, active_temp_dir: tempfile.TemporaryDirectory[str]) -> None:
-        nonlocal processing
-        try:
-            audio_path = finish_recording_session(active_session)
-            run_finished_audio_pipeline(audio_path, args, whisper_model, whisper_cli, llama_model, llama_cli)
-        except BaseException as exc:
-            print(f"Voice: {exc}", file=sys.stderr, flush=True)
-        finally:
-            active_temp_dir.cleanup()
-            with lock:
-                processing = False
-
-    def toggle_recording() -> None:
-        nonlocal session, temp_dir, processing
-
-        with lock:
-            if processing:
-                print("Voice: still processing; hotkey ignored.", file=sys.stderr, flush=True)
-                return
-
-            if session is None:
-                temp_dir = tempfile.TemporaryDirectory(prefix="voice-hotkey-audio-")
-                audio_path = Path(temp_dir.name) / "recording.wav"
-                try:
-                    session = start_recording_session(audio_path, args.backend)
-                except BaseException:
-                    temp_dir.cleanup()
-                    temp_dir = None
-                    raise
-                print(
-                    f"Voice: recording started with {session.backend_name}; press {args.hotkey} again to stop.",
-                    file=sys.stderr,
-                    flush=True,
-                )
-                return
-
-            active_session = session
-            assert temp_dir is not None
-            active_temp_dir = temp_dir
-            session = None
-            temp_dir = None
-            processing = True
-
-        print("Voice: recording stopped; processing...", file=sys.stderr, flush=True)
-        threading.Thread(
-            target=finish_in_background,
-            args=(active_session, active_temp_dir),
-            daemon=True,
-        ).start()
+    resources = resolve_pipeline_resources(args)
+    controller = DictationController(args, resources)
 
     hotkey = X11GlobalHotkey(args.hotkey)
     stop_event = threading.Event()
@@ -3041,11 +3240,90 @@ def command_hotkey(args: argparse.Namespace) -> int:
         flush=True,
     )
     try:
-        hotkey.listen(toggle_recording, stop_event)
+        hotkey.listen(lambda: print(controller.toggle(), file=sys.stderr, flush=True), stop_event)
     finally:
+        controller.shutdown()
         signal.signal(signal.SIGINT, previous_sigint)
         signal.signal(signal.SIGTERM, previous_sigterm)
         print("Voice: hotkey daemon stopped.", file=sys.stderr, flush=True)
+    return 0
+
+
+def command_daemon(args: argparse.Namespace) -> int:
+    apply_runtime_settings(args)
+    args.hotkey = resolve_hotkey(getattr(args, "hotkey", None))
+    args.language = resolve_language(args.language)
+    resources = resolve_pipeline_resources(args)
+    controller = DictationController(args, resources)
+    socket_path = resolve_socket_path(args.socket_path)
+    stop_event = threading.Event()
+
+    prepare_server_socket(socket_path)
+
+    previous_sigint = signal.getsignal(signal.SIGINT)
+    previous_sigterm = signal.getsignal(signal.SIGTERM)
+
+    def request_stop(signum: int, _frame: object) -> None:
+        stop_event.set()
+
+    signal.signal(signal.SIGINT, request_stop)
+    signal.signal(signal.SIGTERM, request_stop)
+
+    try:
+        with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as server:
+            server.bind(str(socket_path))
+            os.chmod(socket_path, 0o600)
+            server.listen()
+            server.settimeout(0.5)
+            print(
+                f"Voice: daemon listening on {socket_path}. Bind Wayland shortcut to `voice trigger --action toggle`.",
+                file=sys.stderr,
+                flush=True,
+            )
+            if wayland_session_active() and not args.auto_paste:
+                print(
+                    "Voice: Wayland default is clipboard copy only. Pass --auto-paste to opt into compositor-dependent paste.",
+                    file=sys.stderr,
+                    flush=True,
+                )
+            elif wayland_session_active() and args.auto_paste:
+                print(
+                    "Voice: Wayland auto-paste depends on compositor virtual keyboard support. If it fails, use copy-only mode.",
+                    file=sys.stderr,
+                    flush=True,
+                )
+            while not stop_event.is_set():
+                try:
+                    connection, _ = server.accept()
+                except TimeoutError:
+                    continue
+                except OSError as exc:
+                    if stop_event.is_set():
+                        break
+                    raise VoiceCliError(f"Voice daemon socket error: {exc}") from exc
+
+                try:
+                    handle_daemon_connection(connection, controller)
+                except BaseException as exc:
+                    print(f"Voice: daemon request failed: {exc}", file=sys.stderr, flush=True)
+    finally:
+        controller.shutdown()
+        signal.signal(signal.SIGINT, previous_sigint)
+        signal.signal(signal.SIGTERM, previous_sigterm)
+        try:
+            socket_path.unlink()
+        except FileNotFoundError:
+            pass
+        print("Voice: daemon stopped.", file=sys.stderr, flush=True)
+    return 0
+
+
+def command_trigger(args: argparse.Namespace) -> int:
+    socket_path = resolve_socket_path(args.socket_path)
+    status_value, _state, message = send_daemon_request(socket_path, args.action)
+    if status_value != "ok":
+        raise VoiceCliError(message)
+    print(message)
     return 0
 
 
@@ -3119,7 +3397,7 @@ def add_paste_args(parser: argparse.ArgumentParser) -> None:
         dest="auto_paste",
         action=argparse.BooleanOptionalAction,
         default=None,
-        help="Paste the final clipboard text into the focused window after transcription.",
+        help="Paste the final clipboard text into the focused window after transcription. Defaults to on for X11 and off for Wayland.",
     )
     parser.add_argument(
         "--paste-delay-ms",
@@ -3254,6 +3532,30 @@ def build_parser() -> argparse.ArgumentParser:
     add_audio_processing_args(hotkey)
     add_paste_args(hotkey)
     hotkey.set_defaults(func=command_hotkey)
+
+    daemon = subparsers.add_parser("daemon", help="Run background daemon for external desktop shortcut triggers.")
+    daemon.add_argument("--socket-path", help="Override the local Unix socket path for daemon control.")
+    daemon.add_argument("--hotkey", help="Accepted for wrapper compatibility; desktop shortcut binding happens outside Voice on Wayland.")
+    daemon.add_argument("--whisper-model", help="Whisper model path. Defaults to the active downloaded model.")
+    daemon.add_argument("--whisper-cli")
+    daemon.add_argument("--language", help="Whisper language code. Defaults to saved setting, initially en.")
+    daemon.add_argument("--whisper-timeout", type=float)
+    add_whisper_decode_args(daemon)
+    daemon.add_argument("--refine", choices=("none", "heuristic", "llama"), default="heuristic")
+    daemon.add_argument("--llama-model", help="GGUF model path for --refine llama.")
+    daemon.add_argument("--llama-cli")
+    daemon.add_argument("--profile", choices=("literal", "balanced", "polished"), default="balanced")
+    daemon.add_argument("--llama-timeout", type=float, default=LLAMA_TIMEOUT_SECONDS)
+    add_runtime_mode_args(daemon)
+    daemon.add_argument("--backend", choices=("auto", "pw-record", "arecord", "ffmpeg"), default="auto")
+    add_audio_processing_args(daemon)
+    add_paste_args(daemon)
+    daemon.set_defaults(func=command_daemon)
+
+    trigger = subparsers.add_parser("trigger", help="Send start/stop/toggle/status to the background daemon.")
+    trigger.add_argument("--socket-path", help="Override the local Unix socket path for daemon control.")
+    trigger.add_argument("--action", choices=("toggle", "start", "stop", "status"), default="toggle")
+    trigger.set_defaults(func=command_trigger)
 
     return parser
 

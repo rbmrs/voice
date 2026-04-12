@@ -110,10 +110,11 @@ VOICE_TRIM_SILENCE_MS=250
 VOICE_TRIM_SILENCE_THRESHOLD=-45dB
 VOICE_MIN_SPEECH_SECONDS=0.25
 VOICE_SECONDS=5    # only used by --auto-run or --once
-VOICE_AUTO_PASTE=1
+VOICE_AUTO_PASTE=1 # opt-in on Wayland; X11 default is on, Wayland default is off
 VOICE_PASTE_DELAY_MS=120
 VOICE_PASTE_TOOL=auto # auto, xdotool, or wtype
 VOICE_HOTKEY=Ctrl+Alt+space # optional override; otherwise use saved shortcut
+VOICE_SOCKET_PATH=/tmp/voice.sock # optional override for daemon + trigger
 ```
 
 Override defaults with environment variables or pass additional TUI flags:
@@ -147,16 +148,17 @@ the selected model, press `A` to activate a downloaded model, and press `X` to
 delete a downloaded model.
 
 The current global hotkey is shown in the dashboard and can trigger the same
-start/stop cycle even when the terminal is not focused. Press `H` to enter
-shortcut recording mode, then press the next key combination, such as
+start/stop cycle even when the terminal is not focused on X11. Press `H` to
+enter shortcut recording mode, then press the next key combination, such as
 `Super+Shift+R`, to update the global binding in the running app. The shortcut
 is saved to `~/.config/voice/config.json` and reused on the next launch. The
 final output is copied to the clipboard when `wl-copy`, `xclip`, `xsel`, or an
 OSC 52-capable terminal is available. Auto-paste is enabled by default: on Linux
 Mint Cinnamon/X11 it sends `Ctrl+V` with `xdotool` when installed, otherwise it
-uses a native XTest fallback through `libX11`/`libXtst`; on Wayland it can use
-`wtype` when available. Use `--no-auto-paste` or `VOICE_AUTO_PASTE=0` to only
-copy. Press `Q` to quit. For a one-shot timed smoke test that exits
+uses a native XTest fallback through `libX11`/`libXtst`; on Wayland the default
+is copy-only, and `wtype` paste is opt-in. Use `--auto-paste` or
+`VOICE_AUTO_PASTE=1` to enable Wayland paste. Use `--no-auto-paste` or
+`VOICE_AUTO_PASTE=0` to force copy-only. Press `Q` to quit. For a one-shot timed smoke test that exits
 automatically using the active model:
 
 ```bash
@@ -191,8 +193,28 @@ The hotkey backend uses X11 `XGrabKey` through `libX11`, so it does not need
 root access or input-device permissions and does not observe normal typing. The
 TUI shortcut recorder temporarily uses `XGrabKeyboard` only while the app is in
 the `Record Shortcut` state. This is the intended path for Linux Mint Cinnamon
-on X11. Wayland sessions do not permit arbitrary global keyboard grabs; use an
-X11 Cinnamon session or bind a desktop shortcut to a Voice command there.
+on X11.
+
+Wayland sessions do not permit arbitrary global keyboard grabs. Use the
+background daemon plus a desktop shortcut that calls `voice trigger`:
+
+```bash
+voice daemon
+voice trigger --action status
+voice trigger --action toggle
+```
+
+Recommended Fedora / GNOME path:
+
+1. Start `voice daemon` in one terminal.
+2. Open Keyboard Shortcuts in system settings.
+3. Add custom shortcut command: `voice trigger --action toggle`
+4. Press shortcut once to start recording.
+5. Press same shortcut again to stop, transcribe, and copy output.
+
+On Fedora GNOME Wayland, treat clipboard copy as stable baseline behavior.
+`wtype` auto-paste is compositor-dependent and can fail with errors like
+`Compositor does not support the virtual keyboard protocol`.
 
 ## Automated Setup
 

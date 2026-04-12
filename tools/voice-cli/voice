@@ -17,6 +17,7 @@ DEFAULT_ARGS=(
   --refine "${VOICE_REFINE:-heuristic}"
   --whisper-timeout "${VOICE_WHISPER_TIMEOUT:-120}"
 )
+SOCKET_ARGS=()
 if [[ -n "${VOICE_WHISPER_MODEL:-}" ]]; then
   DEFAULT_ARGS+=(--whisper-model "${VOICE_WHISPER_MODEL}")
 fi
@@ -62,6 +63,9 @@ fi
 if [[ -n "${VOICE_HOTKEY:-}" ]]; then
   DEFAULT_ARGS+=(--hotkey "${VOICE_HOTKEY}")
 fi
+if [[ -n "${VOICE_SOCKET_PATH:-}" ]]; then
+  SOCKET_ARGS+=(--socket-path "${VOICE_SOCKET_PATH}")
+fi
 
 run_tui() {
   exec python3 -B "${SCRIPT_DIR}/voice.py" tui \
@@ -86,6 +90,14 @@ case "${1:-}" in
   hotkey)
     shift
     exec python3 -B "${SCRIPT_DIR}/voice.py" hotkey "${DEFAULT_ARGS[@]}" "$@"
+    ;;
+  daemon)
+    shift
+    exec python3 -B "${SCRIPT_DIR}/voice.py" daemon "${SOCKET_ARGS[@]}" "${DEFAULT_ARGS[@]}" "$@"
+    ;;
+  trigger)
+    shift
+    exec python3 -B "${SCRIPT_DIR}/voice.py" trigger "${SOCKET_ARGS[@]}" "$@"
     ;;
   run)
     shift

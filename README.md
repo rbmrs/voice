@@ -28,7 +28,8 @@
 - Curses TUI launchable with the `voice` command
 - Toggle recording with `R` — start, stop, transcribe, refine in one keystroke
 - X11 global hotkey daemon (`voice hotkey`) for hands-free trigger from any window
-- Auto-paste into the focused window via `xdotool` (X11) or `wtype` (Wayland)
+- Wayland desktop shortcut path through `voice daemon` + `voice trigger`
+- Auto-paste into the focused window via `xdotool` (X11) or `wtype` (Wayland opt-in)
 - Clipboard copy through `wl-copy`, `xclip`, `xsel`, or OSC 52
 - In-TUI Whisper model manager — browse, download, activate, and delete models
 - Settings screen (`S`) with persistent toggles for auto-paste, fast mode, and silence trim, plus a thread count stepper (Left/Right)
@@ -157,4 +158,6 @@ On Linux, `llama-completion` is used automatically when it exists beside `llama-
 - This project is intentionally packaged as a SwiftPM macOS app so it can build in environments that only have Xcode Command Line Tools installed.
 - For a distributable `.app` bundle, wrap the package in an Xcode app target and add `NSMicrophoneUsageDescription` to the generated app's `Info.plist`.
 - The current transcription path uses upstream `whisper.cpp` CLI arguments such as `--model`, `--file`, `--output-txt`, `--output-file`, `--no-prints`, and `--no-timestamps`.
-- On Linux, the global hotkey uses X11 `XGrabKey` and does not require root access. Wayland sessions do not support arbitrary global keyboard grabs — use an X11 session or bind a desktop shortcut to a `voice` command instead.
+- On Linux, the global hotkey uses X11 `XGrabKey` and does not require root access. Wayland sessions do not support arbitrary global keyboard grabs, so run `voice daemon` and bind your desktop shortcut to `voice trigger --action toggle` instead.
+- On Wayland, clipboard copy is the default. Auto-paste is opt-in because synthetic typing can trigger Remote Desktop / remote interaction prompts.
+- On Fedora GNOME Wayland, treat clipboard copy as the reliable baseline. `wtype` paste also depends on compositor virtual keyboard support and may be unavailable.
