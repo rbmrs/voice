@@ -31,6 +31,8 @@
 - Auto-paste into the focused window via `xdotool` (X11) or `wtype` (Wayland)
 - Clipboard copy through `wl-copy`, `xclip`, `xsel`, or OSC 52
 - In-TUI Whisper model manager — browse, download, activate, and delete models
+- Settings screen (`S`) with persistent toggles for auto-paste, fast mode, and silence trim, plus a thread count stepper (Left/Right)
+- Fast mode skips the heuristic cleanup pass and enables silence trimming — recommended for slow or low-power devices
 - Configurable via environment variables (`VOICE_*`) or `~/.config/voice/config.json`
 
 ### Shared
@@ -114,6 +116,7 @@ See `docs/linux-mvp.md` for GPU options, manual steps, and troubleshooting.
 2. Launch the TUI with `voice`.
 3. Press `M` to open the model manager and download a Whisper model.
 4. Press `R` to start recording, `R` again to stop.
+5. On slow or low-power hardware, press `S` and enable **Fast mode** — it activates silence trimming and skips the heuristic cleanup pass. The TUI will also warn if the active model is too large for comfortable CPU-only use.
 
 ## Model management
 
