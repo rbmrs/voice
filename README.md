@@ -29,7 +29,7 @@
 - Toggle recording with `R` — start, stop, transcribe, refine in one keystroke
 - X11 global hotkey daemon (`voice hotkey`) for hands-free trigger from any window
 - Wayland desktop shortcut path through `voice daemon` + `voice trigger`
-- Auto-paste into the focused window via `xdotool` (X11), `wtype` (Wayland best effort), or the Wayland portal keyboard path after explicit setup
+- Auto-paste into the focused window via `xdotool` (X11 — key combo auto-detected via WM_CLASS, override with `--paste-key`), `wtype` (Wayland best effort), or the Wayland portal keyboard path after explicit setup
 - Clipboard copy through `wl-copy`, `xclip`, `xsel`, or OSC 52
 - In-TUI Whisper model manager — browse, download, activate, and delete models
 - Settings screen (`S`) with persistent toggles for auto-paste, fast mode, and silence trim, plus a thread count stepper (Left/Right)
@@ -58,8 +58,9 @@ Typical Apple Silicon locations:
 - `llama-cli`: `/opt/homebrew/bin/llama-cli`
 - `llama-completion`: `/opt/homebrew/bin/llama-completion`
 
-The macOS app resolves CLIs from common install locations including
-`/opt/homebrew/bin`, `/usr/local/bin`, `~/.local/bin`, and `~/bin`.
+The macOS app resolves CLIs by checking `/opt/homebrew/bin`, `/usr/local/bin`,
+`~/.local/bin`, and `~/bin` first, then falling back to every directory on `$PATH`.
+Tilde paths (e.g. `~/bin/whisper-cli`) are expanded automatically.
 
 Then build and run:
 
