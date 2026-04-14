@@ -535,10 +535,17 @@ _install_symlink() {
   local link="$2"
   local label="$3"
 
-  # Refuse to overwrite a regular file
+  # If a regular file exists, replace it only if it looks like a Voice-managed
+  # wrapper script (exec line points to a whisper.cpp or voice path). Stale
+  # wrappers from old installs would otherwise silently shadow the new symlink.
   if [[ -e "${link}" && ! -L "${link}" ]]; then
-    warn "${link} exists as a regular file — not overwriting. Remove it manually if you want the symlink."
-    return 0
+    if grep -q "exec.*\(whisper\.cpp\|voice\)" "${link}" 2>/dev/null; then
+      warn "${label}: replacing stale Voice-managed script at ${link}"
+      rm "${link}"
+    else
+      warn "${link} exists as a regular file — not overwriting. Remove it manually if you want the symlink."
+      return 0
+    fi
   fi
 
   # Already correct
