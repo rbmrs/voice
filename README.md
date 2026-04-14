@@ -137,13 +137,9 @@ See `docs/linux-mvp.md` for GPU options, manual steps, and troubleshooting.
 
 **Troubleshooting — "Accessibility missing" even though Settings shows it granted**
 
-Voice is currently signed with an ad-hoc signature, so every release has a fresh code identity. macOS caches Accessibility grants against that identity, and after an update the stored grant no longer matches. Fix:
+Voice is ad-hoc signed, so every release has a new code identity. macOS caches Accessibility grants against that identity and silently rejects the old one after an update — without re-prompting.
 
-1. Open **System Settings → Privacy & Security → Accessibility**.
-2. Select **Voice** and click the **−** button to remove it.
-3. Back in Voice, click **Prompt** next to Accessibility and approve the new request.
-
-A one-click reset inside the app is planned.
+Click the **Prompt** button next to Accessibility. It automatically clears the stale entry before asking for a fresh grant, so macOS shows the system dialog again.
 
 ### Linux
 

@@ -46,9 +46,37 @@ final class PermissionService {
         }
     }
 
+    /// Clears any stale TCC entry for this app, then prompts for fresh Accessibility access.
+    ///
+    /// Voice is ad-hoc signed, so every release carries a new code-signature hash.
+    /// macOS caches Accessibility grants against that hash — after an update the stored
+    /// grant no longer matches and `AXIsProcessTrusted()` silently returns false without
+    /// re-prompting. Resetting the TCC entry first ensures the system prompt always fires.
     func promptForAccessibilityAccess() -> Bool {
+        resetAccessibilityTCCEntry()
         let options = ["AXTrustedCheckOptionPrompt": true] as CFDictionary
         return AXIsProcessTrustedWithOptions(options)
+    }
+
+    // MARK: - Private
+
+    private func resetAccessibilityTCCEntry() {
+        guard let bundleID = Bundle.main.bundleIdentifier else { return }
+        guard let tccutil = resolveTCCUtil() else { return }
+
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: tccutil)
+        process.arguments = ["reset", "Accessibility", bundleID]
+        process.standardOutput = FileHandle.nullDevice
+        process.standardError = FileHandle.nullDevice
+
+        try? process.run()
+        process.waitUntilExit()
+    }
+
+    private func resolveTCCUtil() -> String? {
+        let candidates = ["/usr/bin/tccutil", "/usr/local/bin/tccutil"]
+        return candidates.first { FileManager.default.isExecutableFile(atPath: $0) }
     }
 
     func openMicrophoneSettings() {
