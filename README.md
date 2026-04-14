@@ -102,6 +102,13 @@ bash tools/voice-cli/install.sh --gpu cuda
 On Fedora, `--gpu cpu` is useful as a known-good fallback when Vulkan build or
 runtime validation is not ready yet.
 
+To wipe everything for a clean reinstall:
+
+```bash
+voice uninstall                           # removes config, data, whisper build, and symlinks
+bash tools/voice-cli/install.sh           # fresh install
+```
+
 See `docs/linux-mvp.md` for GPU options, manual steps, and troubleshooting.
 
 ## First-run flow

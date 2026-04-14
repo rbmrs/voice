@@ -4325,6 +4325,73 @@ def add_quiet_arg(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("-q", "--quiet", action="store_true", help="Disable terminal status output on stderr.")
 
 
+def command_uninstall(args: argparse.Namespace) -> int:
+    import shutil
+
+    config_path = default_config_path()
+    config_dir = config_path.parent
+
+    data_home = os.environ.get("XDG_DATA_HOME")
+    if data_home:
+        voice_data_dir = Path(data_home).expanduser() / "voice"
+    else:
+        voice_data_dir = Path.home() / ".local" / "share" / "voice"
+
+    local_bin = Path.home() / ".local" / "bin"
+    symlinks = [local_bin / "voice", local_bin / "whisper-cli"]
+
+    model_dir = voice_data_dir / "models"
+    src_dir = voice_data_dir / "src"
+
+    targets: list[tuple[str, Path]] = []
+    if config_dir.exists():
+        targets.append(("config dir", config_dir))
+    if args.keep_models:
+        if src_dir.exists():
+            targets.append(("whisper src/build", src_dir))
+    else:
+        if voice_data_dir.exists():
+            targets.append(("data dir (models + whisper src)", voice_data_dir))
+    for link in symlinks:
+        if link.is_symlink():
+            targets.append(("symlink", link))
+
+    if not targets:
+        print("voice: nothing to remove.")
+        return 0
+
+    print("Voice: the following will be removed:")
+    for label, path in targets:
+        print(f"  {label}: {path}")
+    if args.keep_models and model_dir.exists():
+        print(f"  (keeping models at {model_dir})")
+
+    if not args.yes:
+        try:
+            answer = input("Proceed? [y/N] ").strip().lower()
+        except (EOFError, KeyboardInterrupt):
+            print()
+            return 1
+        if answer not in ("y", "yes"):
+            print("voice: uninstall cancelled.")
+            return 0
+
+    for label, path in targets:
+        try:
+            if path.is_symlink() or path.is_file():
+                path.unlink()
+            else:
+                shutil.rmtree(path)
+            print(f"voice: removed {path}")
+        except OSError as exc:
+            print(f"voice: failed to remove {path}: {exc}", file=sys.stderr)
+
+    print("voice: uninstall complete.")
+    print("  System packages installed by install.sh were not removed.")
+    print("  To reinstall: bash tools/voice-cli/install.sh")
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="voice",
@@ -4468,6 +4535,23 @@ def build_parser() -> argparse.ArgumentParser:
     trigger.add_argument("--socket-path", help="Override the local Unix socket path for daemon control.")
     trigger.add_argument("--action", choices=("toggle", "start", "stop", "status"), default="toggle")
     trigger.set_defaults(func=command_trigger)
+
+    uninstall = subparsers.add_parser(
+        "uninstall",
+        help="Remove Voice config, data, whisper.cpp build, and symlinks for a clean slate.",
+    )
+    uninstall.add_argument(
+        "--keep-models",
+        action="store_true",
+        help="Preserve downloaded model files; remove only config, whisper src/build, and symlinks.",
+    )
+    uninstall.add_argument(
+        "--yes",
+        "-y",
+        action="store_true",
+        help="Skip the confirmation prompt.",
+    )
+    uninstall.set_defaults(func=command_uninstall)
 
     return parser
 

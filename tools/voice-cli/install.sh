@@ -73,11 +73,26 @@ DNF_OPTIONAL_PACKAGES=(
 # ---------------------------------------------------------------------------
 UPDATE=0
 GPU_MODE="auto"
+UNINSTALL=0
+UNINSTALL_KEEP_MODELS=0
+UNINSTALL_YES=0
 
 while [[ "$#" -gt 0 ]]; do
   case "$1" in
     --update)
       UPDATE=1
+      shift
+      ;;
+    --uninstall)
+      UNINSTALL=1
+      shift
+      ;;
+    --keep-models)
+      UNINSTALL_KEEP_MODELS=1
+      shift
+      ;;
+    --yes|-y)
+      UNINSTALL_YES=1
       shift
       ;;
     --gpu)
@@ -95,13 +110,17 @@ while [[ "$#" -gt 0 ]]; do
       ;;
     --help|-h)
       echo "Usage: bash tools/voice-cli/install.sh [--update] [--gpu auto|cpu|vulkan|cuda]"
+      echo "       bash tools/voice-cli/install.sh --uninstall [--keep-models] [--yes]"
       echo ""
-      echo "  (no flags)  Install system packages, build whisper.cpp, wire voice command."
-      echo "              Skips whisper.cpp build if the binary already exists."
-      echo "  --update    Pull the latest whisper.cpp and rebuild before installing."
-      echo "  --gpu MODE  Select backend: auto, cpu, vulkan, or cuda."
-      echo "              auto inspects hardware, installs Vulkan packages when useful,"
-      echo "              and falls back to CPU if no validated accelerator is usable."
+      echo "  (no flags)     Install system packages, build whisper.cpp, wire voice command."
+      echo "                 Skips whisper.cpp build if the binary already exists."
+      echo "  --update       Pull the latest whisper.cpp and rebuild before installing."
+      echo "  --gpu MODE     Select backend: auto, cpu, vulkan, or cuda."
+      echo "                 auto inspects hardware, installs Vulkan packages when useful,"
+      echo "                 and falls back to CPU if no validated accelerator is usable."
+      echo "  --uninstall    Remove Voice config, data, whisper.cpp build, and symlinks."
+      echo "  --keep-models  (with --uninstall) Preserve downloaded model files."
+      echo "  --yes, -y      (with --uninstall) Skip confirmation prompt."
       exit 0
       ;;
     *)
@@ -565,6 +584,61 @@ ensure_path() {
 }
 
 # ---------------------------------------------------------------------------
+# do_uninstall
+# ---------------------------------------------------------------------------
+do_uninstall() {
+  local config_dir="${XDG_CONFIG_HOME:-$HOME/.config}/voice"
+  local voice_data_dir="${XDG_DATA_HOME:-$HOME/.local/share}/voice"
+  local model_dir="${voice_data_dir}/models"
+  local src_dir="${voice_data_dir}/src"
+
+  local targets=()
+
+  [[ -d "${config_dir}" ]] && targets+=("${config_dir}")
+
+  if [[ "${UNINSTALL_KEEP_MODELS}" -eq 1 ]]; then
+    [[ -d "${src_dir}" ]] && targets+=("${src_dir}")
+  else
+    [[ -d "${voice_data_dir}" ]] && targets+=("${voice_data_dir}")
+  fi
+
+  [[ -L "${LOCAL_BIN}/voice" ]] && targets+=("${LOCAL_BIN}/voice")
+  [[ -L "${LOCAL_BIN}/whisper-cli" ]] && targets+=("${LOCAL_BIN}/whisper-cli")
+
+  if [[ "${#targets[@]}" -eq 0 ]]; then
+    ok "Nothing to remove."
+    return 0
+  fi
+
+  step "Voice will remove:"
+  for t in "${targets[@]}"; do
+    echo "  ${t}"
+  done
+  if [[ "${UNINSTALL_KEEP_MODELS}" -eq 1 ]] && [[ -d "${model_dir}" ]]; then
+    echo "  (keeping models at ${model_dir})"
+  fi
+
+  if [[ "${UNINSTALL_YES}" -eq 0 ]]; then
+    printf "Proceed? [y/N] "
+    read -r answer
+    if [[ "${answer,,}" != "y" && "${answer,,}" != "yes" ]]; then
+      warn "Uninstall cancelled."
+      exit 0
+    fi
+  fi
+
+  for t in "${targets[@]}"; do
+    rm -rf "${t}"
+    ok "Removed: ${t}"
+  done
+
+  ok "Uninstall complete."
+  echo ""
+  echo "  System packages installed by install.sh were not removed."
+  echo "  To reinstall: bash tools/voice-cli/install.sh"
+}
+
+# ---------------------------------------------------------------------------
 # run_doctor — fall back if PATH not yet active
 # ---------------------------------------------------------------------------
 run_doctor() {
@@ -583,6 +657,15 @@ run_doctor() {
 # main
 # ---------------------------------------------------------------------------
 main() {
+  if [[ "${UNINSTALL}" -eq 1 ]]; then
+    echo ""
+    step "Voice uninstall"
+    echo ""
+    do_uninstall
+    echo ""
+    exit 0
+  fi
+
   echo ""
   step "Voice Linux setup"
   echo ""
