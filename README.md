@@ -46,36 +46,49 @@
 
 ### macOS
 
-Install the upstream CLIs:
+**Install via Homebrew (recommended)**
+
+One command. Pulls in `whisper.cpp` + `llama.cpp` automatically and skips Gatekeeper warnings.
 
 ```bash
-brew install whisper-cpp llama.cpp
+brew tap rbmrs/voice https://github.com/rbmrs/voice
+brew install --cask voice
 ```
 
-Typical Apple Silicon locations:
+Upgrade later with `brew upgrade --cask voice`.
 
-- `whisper-cli`: `/opt/homebrew/bin/whisper-cli`
-- `llama-cli`: `/opt/homebrew/bin/llama-cli`
-- `llama-completion`: `/opt/homebrew/bin/llama-completion`
+**Install from the DMG**
 
-The macOS app resolves CLIs by checking `/opt/homebrew/bin`, `/usr/local/bin`,
-`~/.local/bin`, and `~/bin` first, then falling back to every directory on `$PATH`.
-Tilde paths (e.g. `~/bin/whisper-cli`) are expanded automatically.
+1. Download `Voice-<version>.dmg` from the [latest release](https://github.com/rbmrs/voice/releases/latest).
+2. Open the DMG and drag **Voice** to the `Applications` folder.
+3. Remove macOS's download flag — **do this before the first launch**:
+   ```bash
+   xattr -dr com.apple.quarantine /Applications/Voice.app
+   ```
+4. Double-click **Voice** in your `Applications` folder, or launch via Spotlight.
+5. Install the background CLIs separately:
+   ```bash
+   brew install whisper-cpp llama.cpp
+   ```
 
-Then build and run:
+If you skip step 3, the first launch shows *"Apple could not verify Voice…"* — click **Done**, then System Settings → Privacy & Security → **Open Anyway**. Running the `xattr` command afterwards is still recommended so macOS keeps the app in a stable location.
+
+**Build from source (developers)**
 
 ```bash
 swift build
 ./voice
 ```
 
-`./voice` launches the SwiftPM menu-bar app and keeps the terminal attached while it is running. Quit from the menu bar or press `Ctrl+C` in the terminal.
+Requires Swift 6.2+ (ships with Xcode 16 Command Line Tools). The `./voice` wrapper launches the menu-bar app and keeps the terminal attached; quit from the menu or `Ctrl+C`.
 
-To make `voice` available directly in your shell, symlink the launcher into a directory on your `PATH`:
+Symlink into `PATH` for direct shell access:
 
 ```bash
 ln -sfn "$PWD/voice" ~/.local/bin/voice
 ```
+
+Voice locates `whisper-cli` and `llama-cli` automatically by querying `brew --prefix` and scanning common bin directories. No `$PATH` wrangling required even when launched from Finder.
 
 ### Linux
 
@@ -115,12 +128,22 @@ See `docs/linux-mvp.md` for GPU options, manual steps, and troubleshooting.
 
 ### macOS
 
-1. Launch the app with `voice` or `./voice`.
-2. Open the menu bar item and then open `Settings`.
-3. Grant Microphone and Accessibility access.
-4. Resolve `whisper-cli` from Settings if needed. This works even for a future packaged `.app`, which may not inherit your shell `PATH`.
-5. Download a Whisper model from the built-in catalog, or browse to a local `.bin` file.
-6. Optionally enable second-pass cleanup and configure `llama.cpp`.
+1. Open **Voice** from your `Applications` folder, Spotlight, or the menu-bar icon that appears after launch (top-right of the screen).
+2. Click the icon → **Settings**.
+3. Grant **Microphone** and **Accessibility** when asked — both are required before dictation will start.
+4. Download a Whisper model from the built-in catalog (or point to a local `.bin`).
+5. Set your global dictation shortcut under **Settings → Shortcut**.
+6. Optional: enable second-pass cleanup and configure `llama.cpp` under **Refinement**.
+
+**Troubleshooting — "Accessibility missing" even though Settings shows it granted**
+
+Voice is currently signed with an ad-hoc signature, so every release has a fresh code identity. macOS caches Accessibility grants against that identity, and after an update the stored grant no longer matches. Fix:
+
+1. Open **System Settings → Privacy & Security → Accessibility**.
+2. Select **Voice** and click the **−** button to remove it.
+3. Back in Voice, click **Prompt** next to Accessibility and approve the new request.
+
+A one-click reset inside the app is planned.
 
 ### Linux
 
@@ -163,9 +186,8 @@ On Linux, `llama-completion` is used automatically when it exists beside `llama-
 
 ## Notes
 
-- This project is intentionally packaged as a SwiftPM macOS app so it can build in environments that only have Xcode Command Line Tools installed.
-- For a distributable `.app` bundle, wrap the package in an Xcode app target and add `NSMicrophoneUsageDescription` to the generated app's `Info.plist`.
-- The current transcription path uses upstream `whisper.cpp` CLI arguments such as `--model`, `--file`, `--output-txt`, `--output-file`, `--no-prints`, and `--no-timestamps`.
+- Voice builds with Xcode Command Line Tools alone; full Xcode is only needed for the CI universal build. Distributable `.app` bundles are produced by `scripts/build-app.sh` and packaged by `scripts/make-dmg.sh`.
+- The transcription path uses upstream `whisper.cpp` CLI arguments such as `--model`, `--file`, `--output-txt`, `--output-file`, `--no-prints`, and `--no-timestamps`.
 - On Linux, the global hotkey uses X11 `XGrabKey` and does not require root access. Wayland sessions do not support arbitrary global keyboard grabs, so run `voice daemon` and bind your desktop shortcut to `voice trigger --action toggle` instead.
 - On Wayland, clipboard copy is the default. For reliable auto-paste, run `voice wayland-setup --enable-auto-paste` first; GNOME may show a system permission dialog labeled `Remote Desktop` or `Remote Interaction`, and Voice uses it only for keyboard paste access.
 - On Fedora GNOME Wayland, bind your shortcut to `voice trigger --action toggle`. Portal-backed auto-paste is the supported path; `wtype` remains a best-effort fallback and can still fail when the compositor lacks virtual keyboard support.
