@@ -8,6 +8,7 @@ enum DictationState: Equatable {
     case refining
     case inserting
     case completed(String)
+    case cancelled
     case error(String)
 
     var menuTitle: String {
@@ -24,6 +25,8 @@ enum DictationState: Equatable {
             "Typing"
         case .completed:
             "Inserted"
+        case .cancelled:
+            "Cancelled"
         case .error:
             "Attention"
         }
@@ -43,6 +46,8 @@ enum DictationState: Equatable {
             "keyboard"
         case .completed:
             "checkmark.circle.fill"
+        case .cancelled:
+            "xmark.circle.fill"
         case .error:
             "exclamationmark.triangle.fill"
         }
@@ -62,6 +67,8 @@ enum DictationState: Equatable {
             "Inserting"
         case .completed:
             "Inserted"
+        case .cancelled:
+            "Cancelled"
         case .error:
             "Setup Needed"
         }
@@ -72,7 +79,7 @@ enum DictationState: Equatable {
         case .idle:
             "Press your dictation shortcut to begin."
         case .listening:
-            "Release the shortcut or press it again to stop."
+            "Release the shortcut or press it again to stop.\nPress Escape to cancel."
         case .transcribing:
             "Converting the local audio buffer into text."
         case .refining:
@@ -81,6 +88,8 @@ enum DictationState: Equatable {
             "Sending the final text to the focused app."
         case .completed(let text):
             text
+        case .cancelled:
+            ""
         case .error(let message):
             message
         }
@@ -109,6 +118,16 @@ enum DictationState: Equatable {
             220
         default:
             128
+        }
+    }
+
+    /// States that show only a centered keyword pill — no icon, no detail text.
+    var isMinimalOverlay: Bool {
+        switch self {
+        case .transcribing, .inserting, .completed, .cancelled:
+            true
+        default:
+            false
         }
     }
 }

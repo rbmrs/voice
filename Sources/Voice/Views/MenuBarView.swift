@@ -198,6 +198,8 @@ struct MenuBarView: View {
             .blue
         case .completed:
             .green
+        case .cancelled:
+            .secondary
         case .error:
             .orange
         }
