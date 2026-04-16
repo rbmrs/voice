@@ -10,6 +10,7 @@ final class OverlayPanelController: NSObject {
     private var hostingController: NSHostingController<OverlayView>?
     private var currentState: DictationState = .idle
     private var isPresented = false
+    private var hasPlacedPanel = false
     private var refreshGeneration: UInt64 = 0
     private var delayedRefreshTask: Task<Void, Never>?
 
@@ -59,6 +60,7 @@ final class OverlayPanelController: NSObject {
 
         self.panel = panel
         self.hostingController = hostingController
+        self.hasPlacedPanel = false
     }
 
     private func configurePanel(_ panel: NSPanel) {
@@ -167,10 +169,12 @@ final class OverlayPanelController: NSObject {
         resizePanel()
 
         let targetScreen = preferredScreen(for: panel)
-        let shouldForceRecenter = !panelFrameIntersectsConnectedScreen(panel.frame)
+        // Ignore the panel's bootstrap frame until we've intentionally placed it once.
+        let shouldForceRecenter = !hasPlacedPanel || !panelFrameIntersectsConnectedScreen(panel.frame)
         let targetFrame = targetFrame(for: panel, on: targetScreen, forceRecenter: shouldForceRecenter)
 
         panel.setFrame(targetFrame, display: false)
+        hasPlacedPanel = true
         panel.orderFrontRegardless()
     }
 
