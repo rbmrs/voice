@@ -4,12 +4,15 @@ import SwiftUI
 import UniformTypeIdentifiers
 
 struct SettingsView: View {
+    private let settingsLabelWidth: CGFloat = 128
+
+    @ObservedObject var coordinator: AppCoordinator
     @ObservedObject var settings: AppSettings
     @ObservedObject var modelLibrary: ModelLibrary
 
     var body: some View {
         Form {
-            Section("Shortcut") {
+            Section {
                 KeyboardShortcuts.Recorder("Dictation Shortcut", name: .dictationTrigger)
 
                 Picker("Recording Mode", selection: $settings.triggerMode) {
@@ -17,29 +20,69 @@ struct SettingsView: View {
                         Text(mode.title).tag(mode)
                     }
                 }
+            }
 
-                Text("Hold-to-talk feels closer to SuperWhisper. Toggle mode is useful for longer dictation bursts.")
-                    .font(.callout)
-                    .foregroundStyle(.secondary)
+            Section("Current Status") {
+                permissionStatusRow(
+                    title: "Microphone",
+                    systemImage: coordinator.permissions.microphone == .granted ? "checkmark.circle.fill" : "mic.slash",
+                    status: coordinator.permissions.microphone.title,
+                    actionTitle: coordinator.permissions.microphone == .granted ? "Open Settings" : "Allow",
+                    action: {
+                        if coordinator.permissions.microphone == .granted {
+                            coordinator.openMicrophoneSettings()
+                        } else {
+                            Task {
+                                await coordinator.requestMicrophoneAccess()
+                            }
+                        }
+                    }
+                )
+
+                permissionStatusRow(
+                    title: "Accessibility",
+                    systemImage: coordinator.permissions.accessibilityTrusted ? "checkmark.circle.fill" : "hand.raised",
+                    status: coordinator.permissions.accessibilityTrusted ? "Granted" : "Missing",
+                    actionTitle: coordinator.permissions.accessibilityTrusted ? "Open Settings" : "Prompt",
+                    action: {
+                        if coordinator.permissions.accessibilityTrusted {
+                            coordinator.openAccessibilitySettings()
+                        } else {
+                            coordinator.promptForAccessibilityAccess()
+                        }
+                    }
+                )
+
+                if !settings.isWhisperConfigured {
+                    statusCallout(
+                        text: settings.whisperConfigurationIssue ?? "Set the whisper-cli path and a local Whisper model file above.",
+                        tint: .orange
+                    )
+                }
+
+                if settings.enableRefinement {
+                    if settings.refinementBackend == .llamaCPP && !settings.isLlamaConfigured {
+                        statusCallout(
+                            text: settings.llamaConfigurationIssue ?? "Refinement is enabled, but llama.cpp is not fully configured.",
+                            tint: .orange
+                        )
+                    }
+                }
             }
 
             Section("Transcription") {
-                LabeledContent("Whisper CLI") {
-                    executableResolver(
-                        path: settings.whisperExecutablePath,
+                settingsRow(title: "Whisper CLI") {
+                    compactExecutableResolver(
                         validation: settings.whisperExecutableValidation,
-                        resolveButtonTitle: "Resolve Whisper CLI",
                         browsePrompt: "Choose whisper-cli",
                         onResolve: { _ = settings.resolveWhisperExecutable() },
                         onBrowse: { settings.whisperExecutablePath = $0 }
                     )
                 }
 
-                LabeledContent("Whisper Model") {
-                    managedModelSelector(
-                        activePath: $settings.whisperModelPath,
+                settingsRow(title: "Whisper Model") {
+                    compactManagedModelSelector(
                         validation: settings.whisperModelValidation,
-                        installedModels: modelLibrary.installedWhisperModels,
                         engine: .whisper,
                         browsePrompt: "Choose a Whisper model",
                         onBrowse: { settings.whisperModelPath = $0 }
@@ -54,26 +97,22 @@ struct SettingsView: View {
                     )
                 }
 
-                LabeledContent("Language") {
-                    VStack(alignment: .leading, spacing: 6) {
+                settingsRow(title: "Language") {
+                    HStack(spacing: 10) {
+                        ValidationMessage(validation: settings.whisperLanguageValidation)
+
+                        Spacer(minLength: 12)
+
                         Picker("Language", selection: $settings.whisperLanguage) {
                             ForEach(AppSettings.whisperLanguageOptions) { option in
                                 Text(option.title).tag(option.code)
                             }
                         }
                         .labelsHidden()
-                        .frame(width: 220)
-
-                        ValidationMessage(validation: settings.whisperLanguageValidation)
+                        .frame(width: 220, alignment: .trailing)
                     }
+                    .frame(maxWidth: .infinity, alignment: .leading)
                 }
-
-                Text("Download Whisper models directly into the app-managed folder, then switch between them using the Active Whisper Model picker above.")
-                    .font(.callout)
-                    .foregroundStyle(.secondary)
-                Text("Whisper CLI is mandatory. If it is missing, use Resolve Whisper CLI instead of typing a terminal path manually.")
-                    .font(.callout)
-                    .foregroundStyle(.secondary)
             }
 
             Section("Refinement") {
@@ -98,22 +137,18 @@ struct SettingsView: View {
                             .font(.callout)
                             .foregroundStyle(.secondary)
                     case .llamaCPP:
-                        LabeledContent("Llama CLI") {
-                            executableResolver(
-                                path: settings.llamaExecutablePath,
+                        settingsRow(title: "Llama CLI") {
+                            compactExecutableResolver(
                                 validation: settings.llamaExecutableValidation,
-                                resolveButtonTitle: "Resolve Llama CLI",
                                 browsePrompt: "Choose llama-cli",
                                 onResolve: { _ = settings.resolveLlamaExecutable() },
                                 onBrowse: { settings.llamaExecutablePath = $0 }
                             )
                         }
 
-                        LabeledContent("Llama Model") {
-                            managedModelSelector(
-                                activePath: $settings.llamaModelPath,
+                        settingsRow(title: "Llama Model") {
+                            compactManagedModelSelector(
                                 validation: settings.llamaModelValidation,
-                                installedModels: modelLibrary.installedRefinementModels,
                                 engine: .llama,
                                 browsePrompt: "Choose a GGUF refinement model",
                                 onBrowse: { settings.llamaModelPath = $0 }
@@ -128,10 +163,7 @@ struct SettingsView: View {
                             )
                         }
 
-                        Text("The curated refinement downloads are official GGUF builds. If you want Llama 3.2 or Mistral instead, use Browse Local File after downloading them manually.")
-                            .font(.callout)
-                            .foregroundStyle(.secondary)
-                        Text("Llama CLI and a GGUF model are only required when the refinement backend is set to llama.cpp.")
+                        Text("For other GGUF models, download them manually and use Browse Local File.")
                             .font(.callout)
                             .foregroundStyle(.secondary)
                     }
@@ -145,7 +177,7 @@ struct SettingsView: View {
                     }
                 }
 
-                Text("Pasteboard mode is faster and feels closer to commercial dictation tools. Keystrokes mode avoids replacing the clipboard, but is slower.")
+                Text(insertionModeDescription)
                     .font(.callout)
                     .foregroundStyle(.secondary)
             }
@@ -164,7 +196,59 @@ struct SettingsView: View {
         }
         .formStyle(.grouped)
         .padding(20)
-        .frame(width: 760)
+        .frame(minWidth: 760, idealWidth: 760, minHeight: 720, idealHeight: 980)
+        .onAppear {
+            coordinator.refreshPermissions()
+        }
+    }
+
+    private func settingsRow<Content: View>(
+        title: String,
+        @ViewBuilder content: () -> Content
+    ) -> some View {
+        HStack(alignment: .center, spacing: 12) {
+            Text(title)
+                .frame(width: settingsLabelWidth, alignment: .leading)
+
+            content()
+                .frame(maxWidth: .infinity, alignment: .leading)
+        }
+    }
+
+    private var insertionModeDescription: String {
+        switch settings.insertionMode {
+        case .pasteboard:
+            "Pastes the result, then restores your clipboard."
+        case .keystrokes:
+            "Types the result directly without using the clipboard."
+        }
+    }
+
+    @ViewBuilder
+    private func compactExecutableResolver(
+        validation: PathValidation,
+        browsePrompt: String,
+        onResolve: @escaping () -> Void,
+        onBrowse: @escaping (String) -> Void
+    ) -> some View {
+        HStack(spacing: 10) {
+            ValidationMessage(validation: validation)
+
+            Spacer(minLength: 12)
+
+            if validation.status != .valid {
+                Button("Resolve") {
+                    onResolve()
+                }
+                .controlSize(.small)
+
+                Button("Browse...") {
+                    browseForExecutable(prompt: browsePrompt, onPick: onBrowse)
+                }
+                .controlSize(.small)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     @ViewBuilder
@@ -206,6 +290,58 @@ struct SettingsView: View {
             }
         }
         .frame(minWidth: 470, alignment: .leading)
+    }
+
+    private func permissionStatusRow(
+        title: String,
+        systemImage: String,
+        status: String,
+        actionTitle: String,
+        action: @escaping () -> Void
+    ) -> some View {
+        HStack {
+            Label("\(title): \(status)", systemImage: systemImage)
+            Spacer()
+            Button(actionTitle) {
+                action()
+            }
+        }
+        .font(.callout)
+    }
+
+    private func statusCallout(text: String, tint: Color) -> some View {
+        Text(text)
+            .font(.callout)
+            .foregroundStyle(tint)
+            .fixedSize(horizontal: false, vertical: true)
+            .padding(10)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(tint.opacity(0.08), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+    }
+
+    @ViewBuilder
+    private func compactManagedModelSelector(
+        validation: PathValidation,
+        engine: ManagedModelEngine,
+        browsePrompt: String,
+        onBrowse: @escaping (String) -> Void
+    ) -> some View {
+        HStack(spacing: 10) {
+            ValidationMessage(validation: validation)
+
+            Spacer(minLength: 12)
+
+            Button("Browse Local File...") {
+                browseForModel(engine: engine, prompt: browsePrompt, onPick: onBrowse)
+            }
+            .controlSize(.small)
+
+            Button("Open Models Folder") {
+                modelLibrary.revealInstallDirectory(for: engine)
+            }
+            .controlSize(.small)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     @ViewBuilder
@@ -283,12 +419,12 @@ struct SettingsView: View {
                 )
             }
 
-            Text(engine == .whisper
-                 ? "The curated Whisper list focuses on the most useful local dictation tradeoffs instead of every upstream artifact."
-                 : "The curated refinement list is intentionally small. Heuristic cleanup works without any second model.")
-                .font(.caption)
-                .foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
+            if engine == .llama && settings.refinementBackend == .heuristic {
+                Text("The curated refinement list is intentionally small. Heuristic cleanup works without any second model.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
         }
         .frame(minWidth: 470, alignment: .leading)
     }

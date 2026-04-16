@@ -15,7 +15,13 @@ struct VoiceApp: App {
         .menuBarExtraStyle(.window)
 
         Settings {
-            SettingsView(settings: coordinator.settings, modelLibrary: coordinator.modelLibrary)
+            SettingsView(
+                coordinator: coordinator,
+                settings: coordinator.settings,
+                modelLibrary: coordinator.modelLibrary
+            )
         }
+        .defaultSize(width: 760, height: 980)
+        .windowResizability(.contentMinSize)
     }
 }
