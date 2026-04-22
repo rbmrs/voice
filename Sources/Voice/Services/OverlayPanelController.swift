@@ -10,7 +10,6 @@ final class OverlayPanelController: NSObject {
     private var hostingController: NSHostingController<OverlayView>?
     private var currentState: DictationState = .idle
     private var isPresented = false
-    private var hasPlacedPanel = false
     private var refreshGeneration: UInt64 = 0
     private var delayedRefreshTask: Task<Void, Never>?
 
@@ -60,7 +59,6 @@ final class OverlayPanelController: NSObject {
 
         self.panel = panel
         self.hostingController = hostingController
-        self.hasPlacedPanel = false
     }
 
     private func configurePanel(_ panel: NSPanel) {
@@ -169,12 +167,9 @@ final class OverlayPanelController: NSObject {
         resizePanel()
 
         let targetScreen = preferredScreen(for: panel)
-        // Ignore the panel's bootstrap frame until we've intentionally placed it once.
-        let shouldForceRecenter = !hasPlacedPanel || !panelFrameIntersectsConnectedScreen(panel.frame)
-        let targetFrame = targetFrame(for: panel, on: targetScreen, forceRecenter: shouldForceRecenter)
+        let targetFrame = targetFrame(for: panel, on: targetScreen)
 
         panel.setFrame(targetFrame, display: false)
-        hasPlacedPanel = true
         panel.orderFrontRegardless()
     }
 
@@ -202,7 +197,7 @@ final class OverlayPanelController: NSObject {
         }
     }
 
-    private func targetFrame(for panel: NSPanel, on screen: NSScreen?, forceRecenter: Bool) -> NSRect {
+    private func targetFrame(for panel: NSPanel, on screen: NSScreen?) -> NSRect {
         let targetScreen = screen ?? NSScreen.main ?? NSScreen.screens.first
         let screenFrame = targetScreen?.frame ?? NSRect(x: 0, y: 0, width: 1440, height: 900)
         let visibleFrame = targetScreen?.visibleFrame ?? screenFrame
@@ -226,29 +221,7 @@ final class OverlayPanelController: NSObject {
             height: panel.frame.height
         )
 
-        guard let targetScreen else {
-            return centeredFrame
-        }
-
-        let currentFrame = panel.frame
-        let isCurrentFrameOnTargetScreen = targetScreen.frame.intersects(currentFrame)
-
-        guard !forceRecenter, isCurrentFrameOnTargetScreen else {
-            return centeredFrame
-        }
-
-        let clampedOrigin = NSPoint(
-            x: max(
-                visibleFrame.minX + horizontalInset,
-                min(currentFrame.origin.x, visibleFrame.maxX - currentFrame.width - horizontalInset)
-            ),
-            y: max(
-                visibleFrame.minY,
-                min(currentFrame.origin.y, screenFrame.maxY - menuBarInset - currentFrame.height - topPadding)
-            )
-        )
-
-        return NSRect(origin: clampedOrigin, size: currentFrame.size)
+        return centeredFrame
     }
 
     private func preferredScreen(for panel: NSPanel) -> NSScreen? {
@@ -281,9 +254,4 @@ final class OverlayPanelController: NSObject {
         }
     }
 
-    private func panelFrameIntersectsConnectedScreen(_ frame: NSRect) -> Bool {
-        NSScreen.screens.contains { screen in
-            screen.frame.intersects(frame)
-        }
-    }
 }
