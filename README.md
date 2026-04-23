@@ -58,6 +58,12 @@ swift build
 
 Requires Swift 6.2+. The `./voice` wrapper launches the app through SwiftPM.
 
+Before cutting a build, run the smoke checks for core settings and text-processing logic:
+
+```bash
+bash scripts/smoke-test.sh
+```
+
 ### Linux
 
 ```bash
