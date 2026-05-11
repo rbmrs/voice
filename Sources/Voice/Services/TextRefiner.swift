@@ -99,7 +99,7 @@ final class LlamaCppTextRefiner: TextRefining {
         - Keep the original language.
         - Fix punctuation and capitalization.
         - Remove filler words and obvious false starts.
-        - Do not add explanations, lists, or extra content.
+        \(profile.contentRule)
         - Return only the cleaned dictation as plain text.
         - Do not repeat the instructions or raw dictation.
 

@@ -143,18 +143,22 @@ struct SettingsView: View {
                         }
                     }
 
-                    Picker("Profile", selection: $settings.refinementProfile) {
-                        ForEach(RefinementProfile.allCases) { profile in
-                            Text(profile.title).tag(profile)
-                        }
-                    }
-
                     switch settings.refinementBackend {
                     case .heuristic:
                         Text("Heuristic mode removes filler words, fixes capitalization, and closes punctuation without loading a second model.")
                             .font(.callout)
                             .foregroundStyle(.secondary)
                     case .llamaCPP:
+                        Picker("Profile", selection: $settings.refinementProfile) {
+                            ForEach(RefinementProfile.allCases) { profile in
+                                Text(profile.title).tag(profile)
+                            }
+                        }
+
+                        Text(settings.refinementProfile.description)
+                            .font(.callout)
+                            .foregroundStyle(.secondary)
+
                         settingsRow(title: "Llama CLI") {
                             compactExecutableResolver(
                                 validation: settings.llamaExecutableValidation,

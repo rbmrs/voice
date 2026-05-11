@@ -31,6 +31,7 @@ enum VoiceSmokeTests {
             SmokeTest(name: "Heuristic refiner removes fillers and adds punctuation", run: testHeuristicTextRefinerRemovesFillersAndAddsPunctuation),
             SmokeTest(name: "Heuristic refiner preserves sentence terminators", run: testHeuristicTextRefinerPreservesExistingSentenceTerminator),
             SmokeTest(name: "Heuristic refiner fails when only fillers remain", run: testHeuristicTextRefinerThrowsWhenOnlyFillersRemain),
+            SmokeTest(name: "Blog profile allows article expansion safely", run: testBlogProfilePromptAllowsSafeExpansion),
             SmokeTest(name: "Llama output cleanup strips prompt wrappers and sentinels", run: testExtractRefinedTextRemovesPromptQuotesAndSentinels),
             SmokeTest(name: "Llama executable fallback prefers llama-completion", run: testRefinementExecutablePrefersLlamaCompletionWhenAvailable),
         ]
@@ -200,6 +201,28 @@ enum VoiceSmokeTests {
         let cleaned = LlamaCppTextRefiner.extractRefinedText(from: output, prompt: prompt)
 
         try expectEqual(cleaned, "Hello there.", "Llama output cleanup should strip quotes and sentinel markers.")
+    }
+
+    private static func testBlogProfilePromptAllowsSafeExpansion() async throws {
+        let blogPrompt = LlamaCppTextRefiner.buildPrompt(rawText: "raw input", profile: .blog)
+        let balancedPrompt = LlamaCppTextRefiner.buildPrompt(rawText: "raw input", profile: .balanced)
+
+        try expect(
+            blogPrompt.contains("Expand terse phrasing into fuller article-style prose."),
+            "Blog profile should explicitly allow article-style expansion."
+        )
+        try expect(
+            blogPrompt.contains("Do not invent facts, examples, data, quotes, names, or claims."),
+            "Blog profile should prevent invented supporting details."
+        )
+        try expect(
+            !blogPrompt.contains("Do not add explanations, lists, or extra content."),
+            "Blog profile should not keep the non-expansion rule."
+        )
+        try expect(
+            balancedPrompt.contains("Do not add explanations, lists, or extra content."),
+            "Balanced profile should keep the non-expansion rule."
+        )
     }
 
     private static func testRefinementExecutablePrefersLlamaCompletionWhenAvailable() async throws {
