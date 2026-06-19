@@ -131,6 +131,31 @@ struct SettingsView: View {
                     }
                     .frame(maxWidth: .infinity, alignment: .leading)
                 }
+
+                Toggle("Skip Silence (Voice Activity Detection)", isOn: $settings.enableVAD)
+
+                if settings.enableVAD {
+                    settingsRow(title: "VAD Model") {
+                        compactManagedModelSelector(
+                            validation: settings.vadModelValidation,
+                            engine: .vad,
+                            browsePrompt: "Choose a Silero VAD model",
+                            onBrowse: { settings.vadModelPath = $0 }
+                        )
+                    }
+
+                    LabeledContent("Download Catalog") {
+                        managedModelCatalog(
+                            models: modelLibrary.models(for: .vad),
+                            activePath: settings.vadModelPath,
+                            engine: .vad
+                        )
+                    }
+
+                    Text("Trims leading and trailing silence before transcription. Speeds up short clips and reduces hallucinated text on quiet audio.")
+                        .font(.callout)
+                        .foregroundStyle(.secondary)
+                }
             }
 
             Section("Refinement") {
@@ -373,9 +398,9 @@ struct SettingsView: View {
         panel.canChooseFiles = true
         panel.canChooseDirectories = false
         panel.allowsMultipleSelection = false
-        panel.allowedContentTypes = [engine == .whisper
-                                     ? (UTType(filenameExtension: "bin") ?? .data)
-                                     : (UTType(filenameExtension: "gguf") ?? .data)]
+        panel.allowedContentTypes = [engine == .llama
+                                     ? (UTType(filenameExtension: "gguf") ?? .data)
+                                     : (UTType(filenameExtension: "bin") ?? .data)]
         panel.directoryURL = modelLibrary.installDirectory(for: engine)
 
         guard panel.runModal() == .OK, let url = panel.url else { return }

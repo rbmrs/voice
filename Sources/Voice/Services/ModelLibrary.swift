@@ -18,6 +18,7 @@ struct InstalledManagedModel: Identifiable, Hashable {
 final class ModelLibrary: ObservableObject {
     @Published private(set) var installedWhisperModels: [InstalledManagedModel] = []
     @Published private(set) var installedRefinementModels: [InstalledManagedModel] = []
+    @Published private(set) var installedVADModels: [InstalledManagedModel] = []
     @Published private(set) var downloadStates: [String: ManagedModelDownloadState] = [:]
 
     private let fileManager: FileManager
@@ -39,6 +40,8 @@ final class ModelLibrary: ObservableObject {
             installedWhisperModels
         case .llama:
             installedRefinementModels
+        case .vad:
+            installedVADModels
         }
     }
 
@@ -70,6 +73,8 @@ final class ModelLibrary: ObservableObject {
             }
         case .llama:
             settings.llamaModelPath = destinationPath
+        case .vad:
+            settings.vadModelPath = destinationPath
         }
     }
 
@@ -87,6 +92,12 @@ final class ModelLibrary: ObservableObject {
         }
 
         installedRefinementModels = ManagedModelCatalog.refinementModels.compactMap { descriptor in
+            let localURL = destinationURL(for: descriptor)
+            guard fileManager.fileExists(atPath: localURL.path) else { return nil }
+            return InstalledManagedModel(descriptor: descriptor, localURL: localURL)
+        }
+
+        installedVADModels = ManagedModelCatalog.vadModels.compactMap { descriptor in
             let localURL = destinationURL(for: descriptor)
             guard fileManager.fileExists(atPath: localURL.path) else { return nil }
             return InstalledManagedModel(descriptor: descriptor, localURL: localURL)
@@ -164,6 +175,10 @@ final class ModelLibrary: ObservableObject {
             if settings.llamaModelPath == path {
                 settings.llamaModelPath = ""
             }
+        case .vad:
+            if settings.vadModelPath == path {
+                settings.vadModelPath = ""
+            }
         }
     }
 
@@ -200,6 +215,7 @@ final class ModelLibrary: ObservableObject {
     private func ensureInstallDirectories() throws {
         try fileManager.createDirectory(at: installDirectory(for: .whisper), withIntermediateDirectories: true, attributes: nil)
         try fileManager.createDirectory(at: installDirectory(for: .llama), withIntermediateDirectories: true, attributes: nil)
+        try fileManager.createDirectory(at: installDirectory(for: .vad), withIntermediateDirectories: true, attributes: nil)
     }
 
     private func installRootDirectory() -> URL {

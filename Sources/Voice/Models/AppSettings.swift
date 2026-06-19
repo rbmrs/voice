@@ -115,6 +115,8 @@ final class AppSettings: ObservableObject {
     @Published var whisperLanguage: String
     @Published var preferredWhisperLanguageOne: String
     @Published var preferredWhisperLanguageTwo: String
+    @Published var enableVAD: Bool
+    @Published var vadModelPath: String
     @Published var enableRefinement: Bool
     @Published var refinementBackend: RefinementBackend
     @Published var refinementProfile: RefinementProfile
@@ -131,6 +133,16 @@ final class AppSettings: ObservableObject {
 
     var whisperExecutableValidation: PathValidation {
         Self.validateExecutable(path: whisperExecutablePath, displayName: "Whisper CLI", expectedName: "whisper-cli")
+    }
+
+    /// True only when the user enabled VAD and a usable Silero model file is present.
+    /// The transcriber checks this before adding `--vad` so a missing model never breaks dictation.
+    var isVADActive: Bool {
+        enableVAD && vadModelValidation.status != .invalid
+    }
+
+    var vadModelValidation: PathValidation {
+        Self.validateFile(path: vadModelPath, displayName: "VAD model", preferredExtension: "bin")
     }
 
     var whisperModelValidation: PathValidation {
@@ -277,6 +289,8 @@ final class AppSettings: ObservableObject {
         whisperLanguage = Self.normalizedWhisperLanguageCode(defaults.string(forKey: Keys.whisperLanguage.rawValue))
         preferredWhisperLanguageOne = Self.normalizedPreferredWhisperLanguageCode(defaults.string(forKey: Keys.preferredWhisperLanguageOne.rawValue))
         preferredWhisperLanguageTwo = Self.normalizedPreferredWhisperLanguageCode(defaults.string(forKey: Keys.preferredWhisperLanguageTwo.rawValue))
+        enableVAD = defaults.object(forKey: Keys.enableVAD.rawValue) as? Bool ?? false
+        vadModelPath = defaults.string(forKey: Keys.vadModelPath.rawValue) ?? ""
         enableRefinement = defaults.object(forKey: Keys.enableRefinement.rawValue) as? Bool ?? true
         refinementBackend = RefinementBackend(rawValue: defaults.string(forKey: Keys.refinementBackend.rawValue) ?? "") ?? .heuristic
         refinementProfile = RefinementProfile(rawValue: defaults.string(forKey: Keys.refinementProfile.rawValue) ?? "") ?? .balanced
@@ -318,6 +332,14 @@ final class AppSettings: ObservableObject {
         $preferredWhisperLanguageTwo
             .map(Self.normalizedPreferredWhisperLanguageCode)
             .sink { [defaults] in defaults.set($0, forKey: Keys.preferredWhisperLanguageTwo.rawValue) }
+            .store(in: &cancellables)
+
+        $enableVAD
+            .sink { [defaults] in defaults.set($0, forKey: Keys.enableVAD.rawValue) }
+            .store(in: &cancellables)
+
+        $vadModelPath
+            .sink { [defaults] in defaults.set($0, forKey: Keys.vadModelPath.rawValue) }
             .store(in: &cancellables)
 
         $enableRefinement
@@ -447,6 +469,8 @@ final class AppSettings: ObservableObject {
         case whisperLanguage
         case preferredWhisperLanguageOne
         case preferredWhisperLanguageTwo
+        case enableVAD
+        case vadModelPath
         case enableRefinement
         case refinementBackend
         case refinementProfile

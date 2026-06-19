@@ -145,10 +145,16 @@ class WhisperModel:
     ram: str
     profile: str
     description: str
+    # Optional overrides for models hosted outside the default whisper.cpp repo.
+    # `base_url` swaps the host repo; `remote_filename` lets the local name differ
+    # from the download name (e.g. distil ships a generic "ggml-model.bin").
+    base_url: str | None = None
+    remote_filename: str | None = None
 
     @property
     def url(self) -> str:
-        return f"{WHISPER_REPO_BASE_URL}/{self.filename}"
+        base = self.base_url or WHISPER_REPO_BASE_URL
+        return f"{base}/{self.remote_filename or self.filename}"
 
     def path(self) -> Path:
         return default_whisper_model_dir() / self.filename
@@ -399,6 +405,35 @@ WHISPER_MODEL_CATALOG: tuple[WhisperModel, ...] = (
         "Recommended best quality/speed tradeoff.",
     ),
     WhisperModel(
+        "large-v3-turbo-q8_0",
+        "Large v3 Turbo (Q8_0)",
+        "ggml-large-v3-turbo-q8_0.bin",
+        "874 MiB",
+        "~1.2 GiB RAM",
+        "fast near-lossless",
+        "Recommended default: Turbo quality at about half the size and RAM.",
+    ),
+    WhisperModel(
+        "large-v3-turbo-q5_0",
+        "Large v3 Turbo (Q5_0)",
+        "ggml-large-v3-turbo-q5_0.bin",
+        "574 MiB",
+        "~0.9 GiB RAM",
+        "fastest large-class",
+        "Smallest premium option; English stays strong, low-resource languages degrade slightly.",
+    ),
+    WhisperModel(
+        "distil-large-v3.5",
+        "Distil Large v3.5 (English)",
+        "ggml-distil-large-v3.5.en.bin",
+        "1.5 GiB",
+        "~2.0 GiB RAM",
+        "fast english-only",
+        "English only; ~1.5x faster than Turbo with matching short-clip accuracy.",
+        base_url="https://huggingface.co/distil-whisper/distil-large-v3.5-ggml/resolve/main",
+        remote_filename="ggml-model.bin",
+    ),
+    WhisperModel(
         "large-v3",
         "Large v3",
         "ggml-large-v3.bin",
@@ -528,6 +563,31 @@ def save_language(language: str) -> None:
 
 def resolve_language(configured: str | None) -> str:
     return configured if configured else load_language()
+
+
+def load_whisper_vad_model() -> str | None:
+    value = read_voice_config().get("whisper_vad_model")
+    return value if isinstance(value, str) and value.strip() else None
+
+
+def save_whisper_vad_model(path: str | None) -> None:
+    config = read_voice_config()
+    if path and path.strip():
+        config["whisper_vad_model"] = path
+    else:
+        config.pop("whisper_vad_model", None)
+    write_voice_config(config)
+
+
+def resolve_whisper_vad_model(configured: str | None) -> Path | None:
+    """CLI flag wins; otherwise fall back to the saved config. Returns None when unset."""
+    chosen = configured if configured and configured.strip() else load_whisper_vad_model()
+    if not chosen:
+        return None
+    expanded = Path(chosen).expanduser()
+    if not expanded.is_file():
+        raise VoiceCliError(f"VAD model not found at {expanded}.")
+    return expanded
 
 
 def wayland_session_active() -> bool:
@@ -1678,6 +1738,7 @@ def transcribe_audio(
     best_of: int,
     fallback: bool,
     max_context: int,
+    vad_model: Path | None = None,
 ) -> str:
     if threads <= 0:
         raise VoiceCliError("--whisper-threads must be greater than zero.")
@@ -1712,6 +1773,10 @@ def transcribe_audio(
             "--max-context",
             str(max_context),
         ]
+        if vad_model is not None:
+            # Silero VAD trims silence before decoding: faster on short clips and
+            # fewer hallucinations on quiet audio. Skipped when no model is set.
+            args.extend(["--vad", "--vad-model", str(vad_model)])
         if not fallback:
             args.append("--no-fallback")
 
@@ -2294,6 +2359,7 @@ def command_transcribe(args: argparse.Namespace) -> int:
             args.whisper_best_of,
             args.whisper_fallback,
             args.whisper_max_context,
+            vad_model=resolve_whisper_vad_model(args.whisper_vad_model),
         )
     print(transcript)
     return 0
@@ -3130,6 +3196,7 @@ def run_tui_pipeline(
                 args.whisper_best_of,
                 args.whisper_fallback,
                 args.whisper_max_context,
+                vad_model=resolve_whisper_vad_model(args.whisper_vad_model),
             ),
         )
         transcribe_elapsed = time.monotonic() - transcribe_start
@@ -3880,6 +3947,7 @@ def run_finished_audio_pipeline(
         args.whisper_best_of,
         args.whisper_fallback,
         args.whisper_max_context,
+        vad_model=resolve_whisper_vad_model(args.whisper_vad_model),
     )
     transcribe_elapsed = time.monotonic() - transcribe_start
     transcribe_duration = audio_duration_seconds(transcribe_audio_path)
@@ -4263,6 +4331,12 @@ def add_whisper_decode_args(parser: argparse.ArgumentParser) -> None:
         type=int,
         default=0,
         help="Maximum context tokens for whisper.cpp. Defaults to 0 for short one-shot dictation.",
+    )
+    parser.add_argument(
+        "--whisper-vad-model",
+        type=str,
+        default=None,
+        help="Path to a Silero VAD ggml model. When set, whisper.cpp skips silence (--vad), speeding up short clips and reducing hallucinations.",
     )
 
 

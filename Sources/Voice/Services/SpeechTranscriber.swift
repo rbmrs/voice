@@ -31,6 +31,13 @@ final class WhisperCppTranscriber: SpeechTranscribing {
 
         arguments.append(contentsOf: ["--language", settings.effectiveWhisperLanguage])
 
+        // Voice activity detection: trims silence before decoding, which speeds up short
+        // clips and suppresses Whisper's tendency to hallucinate text on leading/trailing
+        // silence. Only added when the user enabled it and a Silero model is present.
+        if settings.isVADActive {
+            arguments.append(contentsOf: ["--vad", "--vad-model", settings.vadModelPath])
+        }
+
         let result = try await runner.run(
             executable: settings.whisperExecutablePath,
             arguments: arguments

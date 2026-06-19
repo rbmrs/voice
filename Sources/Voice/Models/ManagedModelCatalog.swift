@@ -3,6 +3,7 @@ import Foundation
 enum ManagedModelEngine: String, CaseIterable, Identifiable {
     case whisper
     case llama
+    case vad
 
     var id: String { rawValue }
 
@@ -12,6 +13,8 @@ enum ManagedModelEngine: String, CaseIterable, Identifiable {
             "Whisper"
         case .llama:
             "Refinement"
+        case .vad:
+            "Voice Activity Detection"
         }
     }
 
@@ -21,6 +24,8 @@ enum ManagedModelEngine: String, CaseIterable, Identifiable {
             "Whisper"
         case .llama:
             "Llama"
+        case .vad:
+            "VAD"
         }
     }
 }
@@ -146,6 +151,45 @@ enum ManagedModelCatalog {
             notes: "This is the strongest all-around Whisper choice in the current curated list."
         ),
         ManagedModelDescriptor(
+            id: "whisper-large-v3-turbo-q8_0",
+            engine: .whisper,
+            title: "Whisper Large v3 Turbo (Q8_0)",
+            fileName: "ggml-large-v3-turbo-q8_0.bin",
+            sourceURL: URL(string: "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-large-v3-turbo-q8_0.bin")!,
+            sizeBytes: 874_000_000,
+            languageSummary: "99 languages",
+            speedSummary: "Faster than full Turbo",
+            qualitySummary: "Near-best",
+            recommendedUse: "Best premium multilingual default: nearly identical accuracy to Turbo at about half the size and RAM.",
+            notes: "Quantized build of Large v3 Turbo with near-lossless quality. Recommended over the full Turbo for most users."
+        ),
+        ManagedModelDescriptor(
+            id: "whisper-large-v3-turbo-q5_0",
+            engine: .whisper,
+            title: "Whisper Large v3 Turbo (Q5_0)",
+            fileName: "ggml-large-v3-turbo-q5_0.bin",
+            sourceURL: URL(string: "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-large-v3-turbo-q5_0.bin")!,
+            sizeBytes: 574_000_000,
+            languageSummary: "99 languages",
+            speedSummary: "Fastest large-class",
+            qualitySummary: "Very good",
+            recommendedUse: "Smallest premium multilingual option; strongest for English on disk-constrained Macs.",
+            notes: "More aggressive quantization than Q8_0. English stays strong; low-resource languages degrade slightly more."
+        ),
+        ManagedModelDescriptor(
+            id: "whisper-distil-large-v3.5-en",
+            engine: .whisper,
+            title: "Distil-Whisper Large v3.5 (English)",
+            fileName: "ggml-distil-large-v3.5.en.bin",
+            sourceURL: URL(string: "https://huggingface.co/distil-whisper/distil-large-v3.5-ggml/resolve/main/ggml-model.bin")!,
+            sizeBytes: 1_520_000_000,
+            languageSummary: "English only",
+            speedSummary: "~1.5x faster than Turbo",
+            qualitySummary: "Near-best (English)",
+            recommendedUse: "Fastest high-accuracy English-only dictation; matches or beats Turbo on short clips.",
+            notes: "Distilled Whisper from a separate Hugging Face repo. English only; language locks to English automatically."
+        ),
+        ManagedModelDescriptor(
             id: "whisper-large-v3",
             engine: .whisper,
             title: "Whisper Large v3",
@@ -188,12 +232,30 @@ enum ManagedModelCatalog {
             notes: "This version is much larger and should be treated as an opt-in quality upgrade."
         ),
     ]
+    static let vadModels: [ManagedModelDescriptor] = [
+        ManagedModelDescriptor(
+            id: "vad-silero-v5",
+            engine: .vad,
+            title: "Silero VAD v5",
+            fileName: "ggml-silero-v5.1.2.bin",
+            sourceURL: URL(string: "https://huggingface.co/ggml-org/whisper-vad/resolve/main/ggml-silero-v5.1.2.bin")!,
+            sizeBytes: 2_217_000,
+            languageSummary: "Language-agnostic",
+            speedSummary: "Negligible overhead",
+            qualitySummary: "Trims silence",
+            recommendedUse: "Download once, then enable VAD to skip silence and reduce hallucinations on quiet clips.",
+            notes: "Tiny Silero voice-activity model used by whisper.cpp's --vad mode. Works with any Whisper model."
+        ),
+    ]
+
     static func models(for engine: ManagedModelEngine) -> [ManagedModelDescriptor] {
         switch engine {
         case .whisper:
             whisperModels
         case .llama:
             refinementModels
+        case .vad:
+            vadModels
         }
     }
 }
