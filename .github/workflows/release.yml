@@ -89,10 +89,15 @@ jobs:
 
             ```bash
             brew tap rbmrs/voice https://github.com/rbmrs/voice
+            brew trust rbmrs/voice   # required on Homebrew 6.0+
             brew install --cask voice
             ```
 
             Requires macOS 14 (Sonoma) or later. `whisper-cpp` + `llama.cpp` pulled in as Cask deps.
+
+            Prefer the Cask over the raw DMG — direct DMG downloads are ad-hoc signed
+            and Gatekeeper will block them unless you run
+            `xattr -dr com.apple.quarantine /Applications/Voice.app` first.
 
             ## SHA256
 

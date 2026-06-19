@@ -2,6 +2,7 @@
 #
 # Install:
 #   brew tap rbmrs/voice https://github.com/rbmrs/voice
+#   brew trust rbmrs/voice   # required on Homebrew 6.0+
 #   brew install --cask voice
 #
 # The 2-arg `brew tap` form is required because the repo is named `voice`,

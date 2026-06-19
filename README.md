@@ -30,10 +30,15 @@ This repository was built with the help of AI coding assistants in an agentic, h
 
 ```bash
 brew tap rbmrs/voice https://github.com/rbmrs/voice
+brew trust rbmrs/voice
 brew install --cask voice
 ```
 
 This also installs `whisper.cpp` and `llama.cpp`.
+
+> `brew trust` is required on Homebrew 6.0+, which refuses to install from
+> third-party taps until they are explicitly trusted. Older Homebrew versions
+> can skip it.
 
 **Install from the DMG**
 
