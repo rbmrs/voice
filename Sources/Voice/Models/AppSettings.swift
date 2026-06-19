@@ -76,66 +76,9 @@ enum RefinementBackend: String, CaseIterable, Identifiable {
     }
 }
 
-enum RefinementProfile: String, CaseIterable, Identifiable {
-    case balanced
-    case email
-    case chat
-    case blog
-
-    var id: String { rawValue }
-
-    var title: String {
-        switch self {
-        case .balanced:
-            "Balanced"
-        case .email:
-            "Professional"
-        case .chat:
-            "Casual"
-        case .blog:
-            "Blog"
-        }
-    }
-
-    var instructions: String {
-        switch self {
-        case .balanced:
-            "Make the text read naturally and clearly without changing the meaning."
-        case .email:
-            "Shape the text into polished, professional prose that feels ready for an email draft."
-        case .chat:
-            "Keep the phrasing casual and conversational while removing dictation artifacts."
-        case .blog:
-            "Expand dictated thoughts into polished article-style prose with a professional, readable tone."
-        }
-    }
-
-    var description: String {
-        switch self {
-        case .balanced:
-            "Cleans up dictation while keeping the original wording and meaning close to what you said."
-        case .email:
-            "Turns dictation into polished, professional prose suitable for email drafts."
-        case .chat:
-            "Keeps dictation casual and conversational while removing filler words and false starts."
-        case .blog:
-            "Expands dictated thoughts into article-style paragraphs without inventing facts, data, or claims."
-        }
-    }
-
-    var contentRule: String {
-        switch self {
-        case .blog:
-            """
-            - Expand terse phrasing into fuller article-style prose.
-            - Add connective wording, transitions, and light elaboration when it helps the text read like an article.
-            - Do not invent facts, examples, data, quotes, names, or claims.
-            """
-        case .balanced, .email, .chat:
-            "- Do not add explanations, lists, or extra content."
-        }
-    }
-}
+// `RefinementProfile` is generated from Resources/refinement-contract.json
+// into Sources/Voice/Generated/RefinementContract.swift — the shared
+// refinement contract both this app and tools/voice-cli/voice.py derive from.
 
 @MainActor
 final class AppSettings: ObservableObject {
@@ -471,7 +414,7 @@ final class AppSettings: ObservableObject {
         let trimmedPath = normalizedPath(path)
 
         guard !trimmedPath.isEmpty else {
-            return PathValidation(status: .invalid, message: "\(displayName) path is missing.")
+            return PathValidation(status: .invalid, message: "No \(displayName) selected. Open Settings to download or choose one.")
         }
 
         var isDirectory: ObjCBool = false

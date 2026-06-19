@@ -46,16 +46,9 @@ final class LlamaCppTextRefiner: TextRefining {
 
         let result = try await runner.run(
             executable: executable,
-            arguments: [
-                "-m", settings.llamaModelPath,
-                "-n", "128",
-                "-no-cnv",
-                "--simple-io",
-                "--no-warmup",
-                "--temp", "0",
-                "--top-k", "1",
-                "-p", prompt,
-            ],
+            arguments: ["-m", settings.llamaModelPath]
+                + RefinementContract.llamaArguments
+                + ["-p", prompt],
             timeout: Self.timeoutSeconds
         )
 
@@ -92,25 +85,7 @@ final class LlamaCppTextRefiner: TextRefining {
     }
 
     nonisolated static func buildPrompt(rawText: String, profile: RefinementProfile) -> String {
-        """
-        You are a local dictation refinement engine.
-        Follow every rule exactly:
-        - Preserve the speaker's meaning.
-        - Keep the original language.
-        - Fix punctuation and capitalization.
-        - Remove filler words and obvious false starts.
-        \(profile.contentRule)
-        - Return only the cleaned dictation as plain text.
-        - Do not repeat the instructions or raw dictation.
-
-        Tone profile:
-        \(profile.instructions)
-
-        Raw dictation:
-        \(rawText)
-
-        Cleaned dictation:
-        """
+        RefinementContract.prompt(rawText: rawText, profile: profile)
     }
 
     nonisolated static func extractRefinedText(from output: String, prompt: String) -> String {
@@ -139,7 +114,7 @@ final class LlamaCppTextRefiner: TextRefining {
                 continue
             }
 
-            if line.hasPrefix("### ") || line.hasPrefix("You are a local dictation") || line.hasPrefix("Tone profile:") || line.hasPrefix("Raw dictation:") {
+            if RefinementContract.headerSkipPrefixes.contains(where: { line.hasPrefix($0) }) {
                 if !collected.isEmpty { break }
                 continue
             }
@@ -168,24 +143,16 @@ final class LlamaCppTextRefiner: TextRefining {
 
     nonisolated static func isSentinelLine(_ line: String) -> Bool {
         let normalized = line.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-        return normalized == "[end of text]"
-            || normalized == "<|endoftext|>"
-            || normalized == "<end_of_turn>"
-            || normalized == "</s>"
+        return RefinementContract.sentinelLines.contains { $0.lowercased() == normalized }
     }
 
     nonisolated static func stripTrailingSentinels(from text: String) -> String {
         var cleaned = text.trimmingCharacters(in: .whitespacesAndNewlines)
-        let patterns = [
-            #"\s*\[end of text\]\s*$"#,
-            #"\s*<\|endoftext\|>\s*$"#,
-            #"\s*<end_of_turn>\s*$"#,
-            #"\s*</s>\s*$"#,
-        ]
 
-        for pattern in patterns {
+        for token in RefinementContract.sentinelLines {
+            let escaped = NSRegularExpression.escapedPattern(for: token)
             cleaned = cleaned.replacingOccurrences(
-                of: pattern,
+                of: "\\s*\(escaped)\\s*$",
                 with: "",
                 options: .regularExpression
             )

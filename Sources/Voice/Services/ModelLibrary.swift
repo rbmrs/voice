@@ -131,11 +131,12 @@ final class ModelLibrary: ObservableObject {
         activeDownloads[descriptor.id] = task
     }
 
-    func delete(_ descriptor: ManagedModelDescriptor) {
+    func delete(_ descriptor: ManagedModelDescriptor, in settings: AppSettings) {
         let modelURL = destinationURL(for: descriptor)
 
         guard fileManager.fileExists(atPath: modelURL.path) else {
             refreshInstalledModels()
+            clearActivePathIfNeeded(for: descriptor, in: settings)
             return
         }
 
@@ -143,8 +144,26 @@ final class ModelLibrary: ObservableObject {
             try fileManager.removeItem(at: modelURL)
             refreshInstalledModels()
             downloadStates[descriptor.id] = .idle
+            clearActivePathIfNeeded(for: descriptor, in: settings)
         } catch {
             downloadStates[descriptor.id] = .failed(error.localizedDescription)
+        }
+    }
+
+    /// Clears the active model path when the deleted model is the one currently selected,
+    /// leaving a clean "no model" state instead of a dangling path to a missing file.
+    private func clearActivePathIfNeeded(for descriptor: ManagedModelDescriptor, in settings: AppSettings) {
+        let path = destinationURL(for: descriptor).path
+
+        switch descriptor.engine {
+        case .whisper:
+            if settings.whisperModelPath == path {
+                settings.whisperModelPath = ""
+            }
+        case .llama:
+            if settings.llamaModelPath == path {
+                settings.llamaModelPath = ""
+            }
         }
     }
 

@@ -1,0 +1,51 @@
+{
+  "promptTemplate": "You are a local dictation refinement engine.\nFollow every rule exactly:\n- Preserve the speaker's meaning.\n- Keep the original language.\n- Fix punctuation and capitalization.\n- Remove filler words and obvious false starts.\n{contentRule}\n- Return only the cleaned dictation as plain text.\n- Do not repeat the instructions or raw dictation.\n\nTone profile:\n{instructions}\n\nRaw dictation:\n{rawText}\n\nCleaned dictation:\n",
+  "defaultProfile": "balanced",
+  "llamaArguments": ["-n", "128", "-no-cnv", "--simple-io", "--no-warmup", "--temp", "0", "--top-k", "1"],
+  "sentinelLines": ["[end of text]", "<|endoftext|>", "<end_of_turn>", "</s>"],
+  "headerSkipPrefixes": ["### ", "You are a local dictation", "Tone profile:", "Raw dictation:"],
+  "profiles": [
+    {
+      "id": "balanced",
+      "title": "Balanced",
+      "description": "Cleans up dictation while keeping the original wording and meaning close to what you said.",
+      "instructions": "Make the text read naturally and clearly without changing the meaning.",
+      "contentRule": "- Do not add explanations, lists, or extra content."
+    },
+    {
+      "id": "email",
+      "title": "Professional",
+      "description": "Turns dictation into polished, professional prose suitable for email drafts.",
+      "instructions": "Shape the text into polished, professional prose that feels ready for an email draft.",
+      "contentRule": "- Do not add explanations, lists, or extra content."
+    },
+    {
+      "id": "chat",
+      "title": "Casual",
+      "description": "Keeps dictation casual and conversational while removing filler words and false starts.",
+      "instructions": "Keep the phrasing casual and conversational while removing dictation artifacts.",
+      "contentRule": "- Do not add explanations, lists, or extra content."
+    },
+    {
+      "id": "blog",
+      "title": "Blog",
+      "description": "Expands dictated thoughts into article-style paragraphs without inventing facts, data, or claims.",
+      "instructions": "Expand dictated thoughts into polished article-style prose with a professional, readable tone.",
+      "contentRule": "- Expand terse phrasing into fuller article-style prose.\n- Add connective wording, transitions, and light elaboration when it helps the text read like an article.\n- Do not invent facts, examples, data, quotes, names, or claims."
+    },
+    {
+      "id": "literal",
+      "title": "Literal",
+      "description": "Makes only the smallest edits needed for punctuation and capitalization, leaving wording untouched.",
+      "instructions": "Make the smallest edits necessary for punctuation and capitalization.",
+      "contentRule": "- Do not add explanations, lists, or extra content."
+    },
+    {
+      "id": "polished",
+      "title": "Polished",
+      "description": "Makes the dictation read naturally while preserving the original meaning.",
+      "instructions": "Make the dictation read naturally while preserving the original meaning.",
+      "contentRule": "- Do not add explanations, lists, or extra content."
+    }
+  ]
+}

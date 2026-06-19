@@ -81,6 +81,54 @@ class VoiceCliError(RuntimeError):
     """Expected CLI failure with a user-facing message."""
 
 
+REFINEMENT_CONTRACT_FILENAME = "refinement-contract.json"
+
+
+def _refinement_contract_path() -> Path:
+    """Locate the shared refinement contract JSON.
+
+    Resolution order: VOICE_REFINEMENT_CONTRACT override, a copy installed
+    beside voice.py, then the repo's Resources/ directory (dev checkout).
+    """
+    override = os.environ.get("VOICE_REFINEMENT_CONTRACT")
+    if override:
+        return Path(override).expanduser()
+
+    here = Path(__file__).resolve().parent
+    candidates = [
+        here / REFINEMENT_CONTRACT_FILENAME,
+        here.parent.parent / "Resources" / REFINEMENT_CONTRACT_FILENAME,
+    ]
+    for candidate in candidates:
+        if candidate.exists():
+            return candidate
+    return candidates[0]
+
+
+@lru_cache(maxsize=1)
+def refinement_contract() -> dict[str, Any]:
+    """Load and cache the shared refinement contract (profiles, prompt, tokens)."""
+    path = _refinement_contract_path()
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except FileNotFoundError as exc:
+        raise VoiceCliError(
+            f"Refinement contract not found at {path}. Reinstall voice-cli or set "
+            "VOICE_REFINEMENT_CONTRACT to the refinement-contract.json path."
+        ) from exc
+    except (OSError, json.JSONDecodeError) as exc:
+        raise VoiceCliError(f"Could not read refinement contract at {path}: {exc}") from exc
+    return data
+
+
+def refinement_profile_ids() -> tuple[str, ...]:
+    return tuple(profile["id"] for profile in refinement_contract()["profiles"])
+
+
+def default_refinement_profile() -> str:
+    return refinement_contract()["defaultProfile"]
+
+
 @dataclass(frozen=True)
 class CommandResult:
     stdout: str
@@ -1701,31 +1749,24 @@ def heuristic_refine(text: str) -> str:
     return capitalized
 
 
+def _refinement_profile(profile: str) -> dict[str, Any]:
+    for entry in refinement_contract()["profiles"]:
+        if entry["id"] == profile:
+            return entry
+    raise VoiceCliError(f"Unknown refinement profile: {profile!r}")
+
+
 def build_llama_prompt(raw_text: str, profile: str) -> str:
-    profile_instructions = {
-        "literal": "Make the smallest edits necessary for punctuation and capitalization.",
-        "balanced": "Clean obvious dictation artifacts while preserving the speaker's wording.",
-        "polished": "Make the dictation read naturally while preserving the original meaning.",
-    }[profile]
-
-    return f"""You are a local dictation refinement engine.
-Follow every rule exactly:
-- Preserve the speaker's meaning.
-- Keep the original language.
-- Fix punctuation and capitalization.
-- Remove filler words and obvious false starts.
-- Do not add explanations, lists, or extra content.
-- Return only the cleaned dictation as plain text.
-- Do not repeat the instructions or raw dictation.
-
-Tone profile:
-{profile_instructions}
-
-Raw dictation:
-{raw_text}
-
-Cleaned dictation:
-"""
+    entry = _refinement_profile(profile)
+    template = refinement_contract()["promptTemplate"]
+    # Substitute rawText last so dictated text containing a literal slot token
+    # cannot be re-substituted (mirrors the Swift RefinementContract.prompt order).
+    return (
+        template
+        .replace("{contentRule}", entry["contentRule"])
+        .replace("{instructions}", entry["instructions"])
+        .replace("{rawText}", raw_text)
+    )
 
 
 def refinement_executable(configured: str | None) -> Path:
@@ -1756,12 +1797,7 @@ def extract_refined_text(output: str, prompt: str) -> str:
                 break
             continue
 
-        if (
-            line.startswith("### ")
-            or line.startswith("You are a local dictation")
-            or line.startswith("Tone profile:")
-            or line.startswith("Raw dictation:")
-        ):
+        if any(line.startswith(prefix) for prefix in refinement_contract()["headerSkipPrefixes"]):
             if collected:
                 break
             continue
@@ -1781,19 +1817,14 @@ def extract_refined_text(output: str, prompt: str) -> str:
 
 
 def is_sentinel_line(line: str) -> bool:
-    return line.strip().lower() in {"[end of text]", "<|endoftext|>", "<end_of_turn>", "</s>"}
+    normalized = line.strip().lower()
+    return any(token.lower() == normalized for token in refinement_contract()["sentinelLines"])
 
 
 def strip_trailing_sentinels(text: str) -> str:
     cleaned = text.strip()
-    patterns = [
-        r"\s*\[end of text\]\s*$",
-        r"\s*<\|endoftext\|>\s*$",
-        r"\s*<end_of_turn>\s*$",
-        r"\s*</s>\s*$",
-    ]
-    for pattern in patterns:
-        cleaned = re.sub(pattern, "", cleaned).strip()
+    for token in refinement_contract()["sentinelLines"]:
+        cleaned = re.sub(rf"\s*{re.escape(token)}\s*$", "", cleaned).strip()
     return cleaned
 
 
@@ -1801,22 +1832,9 @@ def llama_refine(text: str, llama_model: Path, llama_cli: Path, profile: str, ti
     executable = refinement_executable(str(llama_cli))
     prompt = build_llama_prompt(text, profile)
     result = run_command(
-        [
-            executable,
-            "-m",
-            llama_model,
-            "-n",
-            "128",
-            "-no-cnv",
-            "--simple-io",
-            "--no-warmup",
-            "--temp",
-            "0",
-            "--top-k",
-            "1",
-            "-p",
-            prompt,
-        ],
+        [executable, "-m", llama_model]
+        + list(refinement_contract()["llamaArguments"])
+        + ["-p", prompt],
         timeout=timeout,
         status_label=f"Refining with {executable.name}",
     )
@@ -4315,6 +4333,14 @@ def add_quiet_arg(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("-q", "--quiet", action="store_true", help="Disable terminal status output on stderr.")
 
 
+def add_profile_arg(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument(
+        "--profile",
+        choices=refinement_profile_ids(),
+        default=default_refinement_profile(),
+    )
+
+
 def command_uninstall(args: argparse.Namespace) -> int:
     import shutil
 
@@ -4438,7 +4464,7 @@ def build_parser() -> argparse.ArgumentParser:
     refine.add_argument("--text")
     refine.add_argument("--model", help="GGUF model path for --backend llama.")
     refine.add_argument("--llama-cli")
-    refine.add_argument("--profile", choices=("literal", "balanced", "polished"), default="balanced")
+    add_profile_arg(refine)
     refine.add_argument("--timeout", type=float, default=LLAMA_TIMEOUT_SECONDS)
     refine.set_defaults(func=command_refine)
 
@@ -4452,7 +4478,7 @@ def build_parser() -> argparse.ArgumentParser:
     run.add_argument("--refine", choices=("none", "heuristic", "llama"), default="heuristic")
     run.add_argument("--llama-model", help="GGUF model path for --refine llama.")
     run.add_argument("--llama-cli")
-    run.add_argument("--profile", choices=("literal", "balanced", "polished"), default="balanced")
+    add_profile_arg(run)
     run.add_argument("--llama-timeout", type=float, default=LLAMA_TIMEOUT_SECONDS)
     add_runtime_mode_args(run)
     add_common_audio_args(run)
@@ -4470,7 +4496,7 @@ def build_parser() -> argparse.ArgumentParser:
     tui.add_argument("--refine", choices=("none", "heuristic", "llama"), default="heuristic")
     tui.add_argument("--llama-model", help="GGUF model path for --refine llama.")
     tui.add_argument("--llama-cli")
-    tui.add_argument("--profile", choices=("literal", "balanced", "polished"), default="balanced")
+    add_profile_arg(tui)
     tui.add_argument("--llama-timeout", type=float, default=LLAMA_TIMEOUT_SECONDS)
     add_runtime_mode_args(tui)
     tui.add_argument("--backend", choices=("auto", "pw-record", "arecord", "ffmpeg"), default="auto")
@@ -4494,7 +4520,7 @@ def build_parser() -> argparse.ArgumentParser:
     hotkey.add_argument("--refine", choices=("none", "heuristic", "llama"), default="heuristic")
     hotkey.add_argument("--llama-model", help="GGUF model path for --refine llama.")
     hotkey.add_argument("--llama-cli")
-    hotkey.add_argument("--profile", choices=("literal", "balanced", "polished"), default="balanced")
+    add_profile_arg(hotkey)
     hotkey.add_argument("--llama-timeout", type=float, default=LLAMA_TIMEOUT_SECONDS)
     add_runtime_mode_args(hotkey)
     hotkey.add_argument("--backend", choices=("auto", "pw-record", "arecord", "ffmpeg"), default="auto")
@@ -4513,7 +4539,7 @@ def build_parser() -> argparse.ArgumentParser:
     daemon.add_argument("--refine", choices=("none", "heuristic", "llama"), default="heuristic")
     daemon.add_argument("--llama-model", help="GGUF model path for --refine llama.")
     daemon.add_argument("--llama-cli")
-    daemon.add_argument("--profile", choices=("literal", "balanced", "polished"), default="balanced")
+    add_profile_arg(daemon)
     daemon.add_argument("--llama-timeout", type=float, default=LLAMA_TIMEOUT_SECONDS)
     add_runtime_mode_args(daemon)
     daemon.add_argument("--backend", choices=("auto", "pw-record", "arecord", "ffmpeg"), default="auto")

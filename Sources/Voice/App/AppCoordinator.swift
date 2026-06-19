@@ -214,7 +214,6 @@ final class AppCoordinator: ObservableObject {
             // cancel() already transitioned to .cancelled — nothing to do
         } catch {
             present(error)
-            scheduleReset(after: .seconds(2), expectedState: state)
         }
     }
 
@@ -262,7 +261,6 @@ final class AppCoordinator: ObservableObject {
             scheduleReset(after: .seconds(1.2), expectedState: state)
         case .unavailable(let message):
             present(DictationServiceError.configuration(message))
-            scheduleReset(after: .seconds(1.6), expectedState: state)
         }
     }
 
@@ -290,6 +288,8 @@ final class AppCoordinator: ObservableObject {
         let message = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
         lastErrorMessage = message
         transition(to: .error(message))
+        // Error copy is long enough to need a few seconds of read time before auto-dismissing.
+        scheduleReset(after: .seconds(4), expectedState: state)
     }
 
     /// Strips trailing phrases that whisper.cpp hallucinates at the end of short or silent recordings.

@@ -35,7 +35,7 @@ struct SettingsView: View {
                     }
                 }
 
-                Text("The switch-language shortcut cycles the active transcription language between the preferred languages above.")
+                Text("The shortcut cycles the active language between the two above.")
                     .font(.callout)
                     .foregroundStyle(.secondary)
             }
@@ -145,7 +145,7 @@ struct SettingsView: View {
 
                     switch settings.refinementBackend {
                     case .heuristic:
-                        Text("Heuristic mode removes filler words, fixes capitalization, and closes punctuation without loading a second model.")
+                        Text("Cleans filler, capitalization, and punctuation without a second model.")
                             .font(.callout)
                             .foregroundStyle(.secondary)
                     case .llamaCPP:
@@ -185,7 +185,7 @@ struct SettingsView: View {
                             )
                         }
 
-                        Text("For other GGUF models, download them manually and use Browse Local File.")
+                        Text("For other GGUF models, use Browse Local File.")
                             .font(.callout)
                             .foregroundStyle(.secondary)
                     }
@@ -204,17 +204,6 @@ struct SettingsView: View {
                     .foregroundStyle(.secondary)
             }
 
-            Section("Expected Setup") {
-                Text("The app is a menu-bar utility. Accessibility and Microphone permissions must both be granted for end-to-end dictation into other apps.")
-                    .font(.callout)
-                    .foregroundStyle(.secondary)
-                Text("Managed model downloads are stored in your Library/Application Support folder under Voice/Models so users do not need to manage terminal paths themselves.")
-                    .font(.callout)
-                    .foregroundStyle(.secondary)
-                Text("If you package this into an Xcode app target for distribution, add an `NSMicrophoneUsageDescription` entry to the app Info.plist.")
-                    .font(.callout)
-                    .foregroundStyle(.secondary)
-            }
         }
         .formStyle(.grouped)
         .padding(20)
@@ -273,47 +262,6 @@ struct SettingsView: View {
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 
-    @ViewBuilder
-    private func executableResolver(
-        path: String,
-        validation: PathValidation,
-        resolveButtonTitle: String,
-        browsePrompt: String,
-        onResolve: @escaping () -> Void,
-        onBrowse: @escaping (String) -> Void
-    ) -> some View {
-        VStack(alignment: .leading, spacing: 6) {
-            if validation.status == .valid {
-                Text(path)
-                    .font(.callout.monospaced())
-                    .textSelection(.enabled)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                ValidationMessage(validation: validation)
-            } else {
-                HStack(spacing: 10) {
-                    Button(resolveButtonTitle) {
-                        onResolve()
-                    }
-
-                    Button("Browse...") {
-                        browseForExecutable(prompt: browsePrompt, onPick: onBrowse)
-                    }
-                }
-
-                if !path.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                    Text(path)
-                        .font(.caption.monospaced())
-                        .foregroundStyle(.secondary)
-                        .textSelection(.enabled)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                }
-
-                ValidationMessage(validation: validation)
-            }
-        }
-        .frame(minWidth: 470, alignment: .leading)
-    }
-
     private func permissionStatusRow(
         title: String,
         systemImage: String,
@@ -367,56 +315,6 @@ struct SettingsView: View {
     }
 
     @ViewBuilder
-    private func managedModelSelector(
-        activePath: Binding<String>,
-        validation: PathValidation,
-        installedModels: [InstalledManagedModel],
-        engine: ManagedModelEngine,
-        browsePrompt: String,
-        onBrowse: @escaping (String) -> Void
-    ) -> some View {
-        let options = selectionOptions(installedModels: installedModels, currentPath: activePath.wrappedValue)
-
-        VStack(alignment: .leading, spacing: 8) {
-            if options.isEmpty {
-                Text("No downloaded \(engine.displayName.lowercased()) models yet. Download one below or browse for a local file.")
-                    .font(.callout)
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
-            } else {
-                Picker("Active Model", selection: activePath) {
-                    ForEach(options) { option in
-                        Text(option.title).tag(option.path)
-                    }
-                }
-                .labelsHidden()
-                .frame(width: 470)
-            }
-
-            HStack(spacing: 10) {
-                Button("Browse Local File...") {
-                    browseForModel(engine: engine, prompt: browsePrompt, onPick: onBrowse)
-                }
-
-                Button("Open Models Folder") {
-                    modelLibrary.revealInstallDirectory(for: engine)
-                }
-            }
-
-            if !activePath.wrappedValue.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                Text(activePath.wrappedValue)
-                    .font(.caption.monospaced())
-                    .foregroundStyle(.secondary)
-                    .textSelection(.enabled)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-            }
-
-            ValidationMessage(validation: validation)
-        }
-        .frame(minWidth: 470, alignment: .leading)
-    }
-
-    @ViewBuilder
     private func managedModelCatalog(
         models: [ManagedModelDescriptor],
         activePath: String,
@@ -436,39 +334,19 @@ struct SettingsView: View {
                         modelLibrary.activate(descriptor, in: settings)
                     },
                     onDelete: {
-                        modelLibrary.delete(descriptor)
+                        modelLibrary.delete(descriptor, in: settings)
                     }
                 )
             }
 
             if engine == .llama && settings.refinementBackend == .heuristic {
-                Text("The curated refinement list is intentionally small. Heuristic cleanup works without any second model.")
+                Text("Heuristic cleanup works without any second model.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
             }
         }
         .frame(minWidth: 470, alignment: .leading)
-    }
-
-    private func selectionOptions(
-        installedModels: [InstalledManagedModel],
-        currentPath: String
-    ) -> [ModelSelectionOption] {
-        var options = installedModels.map { installedModel in
-            ModelSelectionOption(
-                path: installedModel.localURL.path,
-                title: installedModel.descriptor.title
-            )
-        }
-
-        let trimmedPath = currentPath.trimmingCharacters(in: .whitespacesAndNewlines)
-        if !trimmedPath.isEmpty && !options.contains(where: { $0.path == trimmedPath }) {
-            let customTitle = URL(fileURLWithPath: trimmedPath).lastPathComponent
-            options.insert(ModelSelectionOption(path: trimmedPath, title: "Custom: \(customTitle)"), at: 0)
-        }
-
-        return options
     }
 
     private func browseForExecutable(prompt: String, onPick: @escaping (String) -> Void) {
@@ -503,13 +381,6 @@ struct SettingsView: View {
         guard panel.runModal() == .OK, let url = panel.url else { return }
         onPick(url.path)
     }
-}
-
-private struct ModelSelectionOption: Identifiable, Hashable {
-    let path: String
-    let title: String
-
-    var id: String { path }
 }
 
 private struct ManagedModelCard: View {
@@ -556,33 +427,36 @@ private struct ManagedModelCard: View {
             switch downloadState {
             case .idle:
                 EmptyView()
-            case .downloading(let progress):
-                VStack(alignment: .leading, spacing: 6) {
-                    HStack(spacing: 8) {
-                        if let progress {
-                            Text("\(Int((progress * 100).rounded()))%")
-                                .font(.caption.weight(.semibold))
-                                .monospacedDigit()
-                                .foregroundStyle(.secondary)
-                        } else {
-                            Text("Starting download")
-                                .font(.caption.weight(.semibold))
-                                .foregroundStyle(.secondary)
-                        }
-
-                        Text("Downloading into the managed model folder. This can take a while for larger models.")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    }
-
-                    if let progress {
-                        ProgressView(value: progress, total: 1)
-                            .controlSize(.small)
-                    } else {
-                        ProgressView()
-                            .controlSize(.small)
-                    }
-                }
+            case .downloading:
+                // Dormant: the compact "Downloading NN%" label in actionView is the single
+                // download indicator. The full progress block below is kept for easy revival.
+                EmptyView()
+                // VStack(alignment: .leading, spacing: 6) {
+                //     HStack(spacing: 8) {
+                //         if let progress {
+                //             Text("\(Int((progress * 100).rounded()))%")
+                //                 .font(.caption.weight(.semibold))
+                //                 .monospacedDigit()
+                //                 .foregroundStyle(.secondary)
+                //         } else {
+                //             Text("Starting download")
+                //                 .font(.caption.weight(.semibold))
+                //                 .foregroundStyle(.secondary)
+                //         }
+                //
+                //         Text("Downloading into the managed model folder. This can take a while for larger models.")
+                //             .font(.caption)
+                //             .foregroundStyle(.secondary)
+                //     }
+                //
+                //     if let progress {
+                //         ProgressView(value: progress, total: 1)
+                //             .controlSize(.small)
+                //     } else {
+                //         ProgressView()
+                //             .controlSize(.small)
+                //     }
+                // }
             case .failed(let message):
                 Label(message, systemImage: "xmark.circle.fill")
                     .font(.caption)
@@ -607,20 +481,27 @@ private struct ManagedModelCard: View {
         switch downloadState {
         case .downloading(let progress):
             Text(progress.map { "Downloading \(Int(($0 * 100).rounded()))%" } ?? "Downloading")
-                .font(.caption.weight(.semibold))
+                .font(.callout.weight(.semibold))
                 .foregroundStyle(.secondary)
+                .monospacedDigit()
         case .failed:
             Button("Retry") {
                 onDownload()
             }
         case .idle:
             if isActive {
-                Text("Active")
-                    .font(.caption.weight(.semibold))
-                    .padding(.horizontal, 10)
-                    .padding(.vertical, 6)
-                    .background(Capsule().fill(Color.accentColor.opacity(0.14)))
-                    .foregroundStyle(Color.accentColor)
+                HStack(spacing: 8) {
+                    Text("Active")
+                        .font(.caption.weight(.semibold))
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 6)
+                        .background(Capsule().fill(Color.accentColor.opacity(0.14)))
+                        .foregroundStyle(Color.accentColor)
+
+                    Button("Delete") {
+                        onDelete()
+                    }
+                }
             } else if isInstalled {
                 HStack(spacing: 8) {
                     Button("Use") {
