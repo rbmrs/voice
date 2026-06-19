@@ -10,6 +10,15 @@ struct SettingsView: View {
     @ObservedObject var settings: AppSettings
     @ObservedObject var modelLibrary: ModelLibrary
 
+    // macOS sends no notification when an Accessibility/TCC grant changes, so the only
+    // reliable way to reflect it live is to re-check while this window is on screen.
+    // AXIsProcessTrusted() is a cheap in-process call; a 1s poll is negligible and lets
+    // the status flip to "Granted" the moment the user toggles it in System Settings,
+    // without forcing them to close and reopen the window. `isVisible` gates the work so
+    // a closed/background Settings window does no polling.
+    private let permissionPoll = Timer.publish(every: 1, on: .main, in: .common).autoconnect()
+    @State private var isVisible = false
+
     var body: some View {
         Form {
             Section {
@@ -233,8 +242,23 @@ struct SettingsView: View {
         .formStyle(.grouped)
         .padding(20)
         .frame(minWidth: 760, idealWidth: 760, minHeight: 720, idealHeight: 980)
-        .onAppear {
+        .onReceive(permissionPoll) { _ in
+            guard isVisible else { return }
             coordinator.refreshPermissions()
+        }
+        // Primary live-feeling trigger: the user grants/revokes in System Settings and then
+        // switches back to Voice. macOS has no in-process permission-change event, but the
+        // cached status is usually accurate again by the time the app reactivates, so this
+        // catches the common toggle-then-return flow immediately.
+        .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
+            coordinator.refreshPermissions()
+        }
+        .onAppear {
+            isVisible = true
+            coordinator.refreshPermissions()
+        }
+        .onDisappear {
+            isVisible = false
         }
     }
 

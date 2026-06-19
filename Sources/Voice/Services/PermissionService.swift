@@ -1,6 +1,7 @@
 import AppKit
 import AVFoundation
 import ApplicationServices
+import CoreGraphics
 import Foundation
 
 enum MicrophoneAccessState: Equatable {
@@ -31,6 +32,13 @@ struct PermissionSnapshot: Equatable {
 
 @MainActor
 final class PermissionService {
+    /// Reads current permission state. NOTE: macOS exposes no API that reports permission
+    /// changes live within a running process — `AXIsProcessTrusted()` and
+    /// `AVCaptureDevice.authorizationStatus(for:)` both read a per-process cache that `tccd`
+    /// never invalidates mid-run. The UI compensates by re-snapshotting on app re-activation
+    /// (the user returns to Voice right after toggling in System Settings) and on a short
+    /// poll while the Settings window is visible. A `CGEvent` tap probe was tried and removed:
+    /// once a tap succeeds it keeps succeeding after revocation, so it is not actually live.
     func snapshot() -> PermissionSnapshot {
         PermissionSnapshot(
             microphone: microphoneState(),
