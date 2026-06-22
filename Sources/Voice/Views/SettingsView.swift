@@ -141,30 +141,7 @@ struct SettingsView: View {
                     .frame(maxWidth: .infinity, alignment: .leading)
                 }
 
-                Toggle("Skip Silence (Voice Activity Detection)", isOn: $settings.enableVAD)
-
-                if settings.enableVAD {
-                    settingsRow(title: "VAD Model") {
-                        compactManagedModelSelector(
-                            validation: settings.vadModelValidation,
-                            engine: .vad,
-                            browsePrompt: "Choose a Silero VAD model",
-                            onBrowse: { settings.vadModelPath = $0 }
-                        )
-                    }
-
-                    LabeledContent("Download Catalog") {
-                        managedModelCatalog(
-                            models: modelLibrary.models(for: .vad),
-                            activePath: settings.vadModelPath,
-                            engine: .vad
-                        )
-                    }
-
-                    Text("Trims leading and trailing silence before transcription. Speeds up short clips and reduces hallucinated text on quiet audio.")
-                        .font(.callout)
-                        .foregroundStyle(.secondary)
-                }
+                skipSilenceToggle
             }
 
             Section("Refinement") {
@@ -259,6 +236,44 @@ struct SettingsView: View {
         }
         .onDisappear {
             isVisible = false
+        }
+    }
+
+    /// One friendly switch for the whole VAD feature. Flipping it on silently downloads the
+    /// tiny (~2 MB) Silero model if needed and wires everything; off just disables it. No
+    /// model picker, path, or catalog — `ModelLibrary.setSkipSilence` owns the lifecycle.
+    private var skipSilenceToggle: some View {
+        let isDownloading = modelLibrary.isSkipSilenceDownloading
+        let binding = Binding(
+            get: { settings.enableVAD },
+            set: { modelLibrary.setSkipSilence($0, in: settings) }
+        )
+
+        return VStack(alignment: .leading, spacing: 6) {
+            HStack(spacing: 8) {
+                Toggle("Skip Silence", isOn: binding)
+                    .disabled(isDownloading)
+
+                if isDownloading {
+                    ProgressView()
+                        .controlSize(.small)
+                    Text("Downloading…")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+            }
+
+            Text("Trims silence for faster, cleaner transcripts.")
+                .font(.callout)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+
+            if let model = modelLibrary.skipSilenceModel,
+               case .failed = modelLibrary.state(for: model) {
+                Text("Couldn't download the Skip Silence model. Check your connection and try again.")
+                    .font(.caption)
+                    .foregroundStyle(.red)
+            }
         }
     }
 
@@ -444,15 +459,9 @@ private struct ManagedModelCard: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             HStack(alignment: .top, spacing: 12) {
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(descriptor.title)
-                        .font(.headline)
-
-                    Text(descriptor.recommendedUse)
-                        .font(.callout)
-                        .foregroundStyle(.secondary)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
+                Text(descriptor.title)
+                    .font(.headline)
+                    .frame(maxWidth: .infinity, alignment: .leading)
 
                 Spacer(minLength: 12)
 
@@ -464,13 +473,6 @@ private struct ManagedModelCard: View {
                 ModelBadge(text: descriptor.languageSummary)
                 ModelBadge(text: descriptor.speedSummary)
                 ModelBadge(text: descriptor.qualitySummary)
-            }
-
-            if let notes = descriptor.notes {
-                Text(notes)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
             }
 
             switch downloadState {

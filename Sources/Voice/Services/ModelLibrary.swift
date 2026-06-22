@@ -84,6 +84,84 @@ final class ModelLibrary: ObservableObject {
         NSWorkspace.shared.open(directoryURL)
     }
 
+    // MARK: - Skip Silence (VAD)
+
+    /// The single Silero model that backs the "Skip Silence" toggle. There is only ever one,
+    /// so the UI never needs to expose a picker — the toggle owns its whole lifecycle.
+    var skipSilenceModel: ManagedModelDescriptor? {
+        ManagedModelCatalog.vadModels.first
+    }
+
+    /// True while the Skip Silence model is downloading — drives the toggle's inline spinner.
+    var isSkipSilenceDownloading: Bool {
+        guard let model = skipSilenceModel else { return false }
+        if case .downloading = state(for: model) { return true }
+        return false
+    }
+
+    /// One-call entry point for the friendly toggle. Enabling auto-downloads the tiny Silero
+    /// model if it's missing, then wires `vadModelPath` + `enableVAD` once it's on disk — the
+    /// user never sees a model picker, path, or catalog. Disabling just turns VAD off and
+    /// leaves the (2 MB) model cached so re-enabling is instant.
+    func setSkipSilence(_ enabled: Bool, in settings: AppSettings) {
+        guard let model = skipSilenceModel else {
+            settings.enableVAD = false
+            return
+        }
+
+        guard enabled else {
+            settings.enableVAD = false
+            return
+        }
+
+        if isInstalled(model) {
+            activate(model, in: settings)
+            settings.enableVAD = true
+        } else {
+            // Flip the intent on now; the path is wired the moment the download finishes.
+            settings.enableVAD = true
+            downloadSkipSilenceModel(model, in: settings)
+        }
+    }
+
+    private func downloadSkipSilenceModel(_ model: ManagedModelDescriptor, in settings: AppSettings) {
+        guard activeDownloads[model.id] == nil else { return }
+
+        let destinationURL = destinationURL(for: model)
+        downloadStates[model.id] = .downloading(progress: 0)
+
+        let task = Task { [weak self] in
+            guard let self else { return }
+            do {
+                try await Self.performDownload(from: model.sourceURL, to: destinationURL) { [weak self] progress in
+                    guard let self else { return }
+                    await MainActor.run { self.downloadStates[model.id] = .downloading(progress: progress) }
+                }
+                guard !Task.isCancelled else { return }
+                await MainActor.run {
+                    self.downloadStates[model.id] = .idle
+                    self.activeDownloads[model.id] = nil
+                    self.refreshInstalledModels()
+                    // Wire the path only after the file exists; keep VAD on only if it landed.
+                    if self.isInstalled(model), settings.enableVAD {
+                        self.activate(model, in: settings)
+                    } else {
+                        settings.enableVAD = false
+                    }
+                }
+            } catch {
+                await MainActor.run {
+                    self.downloadStates[model.id] = .failed(error.localizedDescription)
+                    self.activeDownloads[model.id] = nil
+                    // Download failed — don't leave VAD enabled pointing at nothing.
+                    settings.enableVAD = false
+                }
+            }
+        }
+
+        activeDownloads[model.id] = task
+    }
+
     func refreshInstalledModels() {
         installedWhisperModels = ManagedModelCatalog.whisperModels.compactMap { descriptor in
             let localURL = destinationURL(for: descriptor)
