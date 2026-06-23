@@ -21,7 +21,7 @@ struct VoiceApp: App {
                 modelLibrary: coordinator.modelLibrary
             )
         }
-        .defaultSize(width: 760, height: 980)
+        .defaultSize(width: 960, height: 700)
         .windowResizability(.contentMinSize)
     }
 }
