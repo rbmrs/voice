@@ -42,6 +42,10 @@ struct ManagedModelDescriptor: Identifiable, Hashable {
     let qualitySummary: String
     let recommendedUse: String
     let notes: String?
+    // Ratings drive the 1...10 gauges in ManagedModelCard. nil falls back to the text badge
+    // (e.g. VAD, whose "Negligible overhead" / "Trims silence" aren't on a speed/accuracy scale).
+    var speedRating: Int? = nil
+    var qualityRating: Int? = nil
 
     var sizeLabel: String {
         let formatter = ByteCountFormatter()
@@ -70,7 +74,9 @@ enum ManagedModelCatalog {
             speedSummary: "Fastest",
             qualitySummary: "Lowest",
             recommendedUse: "Best for quick testing and very low-latency English dictation.",
-            notes: "Use this when startup speed matters more than transcript quality."
+            notes: "Use this when startup speed matters more than transcript quality.",
+            speedRating: 10,
+            qualityRating: 2
         ),
         ManagedModelDescriptor(
             id: "whisper-base-en",
@@ -83,7 +89,9 @@ enum ManagedModelCatalog {
             speedSummary: "Very fast",
             qualitySummary: "Low-medium",
             recommendedUse: "Good lightweight default for English dictation on smaller Macs.",
-            notes: "This is a strong first download if you want a compact offline setup."
+            notes: "This is a strong first download if you want a compact offline setup.",
+            speedRating: 8,
+            qualityRating: 4
         ),
         ManagedModelDescriptor(
             id: "whisper-small-en",
@@ -96,7 +104,9 @@ enum ManagedModelCatalog {
             speedSummary: "Fast",
             qualitySummary: "Good",
             recommendedUse: "Best overall balance for English-only daily dictation.",
-            notes: "This is the most practical quality-per-gigabyte Whisper pick for English."
+            notes: "This is the most practical quality-per-gigabyte Whisper pick for English.",
+            speedRating: 6,
+            qualityRating: 6
         ),
         ManagedModelDescriptor(
             id: "whisper-medium-en",
@@ -109,7 +119,9 @@ enum ManagedModelCatalog {
             speedSummary: "Moderate",
             qualitySummary: "Very good",
             recommendedUse: "Quality-first English dictation when you can spend more RAM and disk.",
-            notes: "This is a good premium English option before stepping up to large multilingual models."
+            notes: "This is a good premium English option before stepping up to large multilingual models.",
+            speedRating: 4,
+            qualityRating: 7
         ),
         ManagedModelDescriptor(
             id: "whisper-base-multilingual",
@@ -122,7 +134,9 @@ enum ManagedModelCatalog {
             speedSummary: "Very fast",
             qualitySummary: "Low-medium",
             recommendedUse: "Compact multilingual starter model for basic mixed-language dictation.",
-            notes: "Choose this over the English-only build if you frequently switch languages."
+            notes: "Choose this over the English-only build if you frequently switch languages.",
+            speedRating: 8,
+            qualityRating: 4
         ),
         ManagedModelDescriptor(
             id: "whisper-small-multilingual",
@@ -135,7 +149,9 @@ enum ManagedModelCatalog {
             speedSummary: "Fast",
             qualitySummary: "Good",
             recommendedUse: "Best balanced multilingual model for everyday dictation.",
-            notes: "This is the best first multilingual download for most users."
+            notes: "This is the best first multilingual download for most users.",
+            speedRating: 6,
+            qualityRating: 6
         ),
         ManagedModelDescriptor(
             id: "whisper-large-v3-turbo",
@@ -148,7 +164,9 @@ enum ManagedModelCatalog {
             speedSummary: "Fast for its class",
             qualitySummary: "Near-best",
             recommendedUse: "Best premium multilingual default when you want speed and strong accuracy.",
-            notes: "This is the strongest all-around Whisper choice in the current curated list."
+            notes: "This is the strongest all-around Whisper choice in the current curated list.",
+            speedRating: 5,
+            qualityRating: 9
         ),
         ManagedModelDescriptor(
             id: "whisper-large-v3-turbo-q8_0",
@@ -161,7 +179,9 @@ enum ManagedModelCatalog {
             speedSummary: "Faster than full Turbo",
             qualitySummary: "Near-best",
             recommendedUse: "Best premium multilingual default: nearly identical accuracy to Turbo at about half the size and RAM.",
-            notes: "Quantized build of Large v3 Turbo with near-lossless quality. Recommended over the full Turbo for most users."
+            notes: "Quantized build of Large v3 Turbo with near-lossless quality. Recommended over the full Turbo for most users.",
+            speedRating: 6,
+            qualityRating: 9
         ),
         ManagedModelDescriptor(
             id: "whisper-large-v3-turbo-q5_0",
@@ -174,7 +194,9 @@ enum ManagedModelCatalog {
             speedSummary: "Fastest large-class",
             qualitySummary: "Very good",
             recommendedUse: "Smallest premium multilingual option; strongest for English on disk-constrained Macs.",
-            notes: "More aggressive quantization than Q8_0. English stays strong; low-resource languages degrade slightly more."
+            notes: "More aggressive quantization than Q8_0. English stays strong; low-resource languages degrade slightly more.",
+            speedRating: 7,
+            qualityRating: 7
         ),
         ManagedModelDescriptor(
             id: "whisper-distil-large-v3.5-en",
@@ -187,7 +209,9 @@ enum ManagedModelCatalog {
             speedSummary: "~1.5x faster than Turbo",
             qualitySummary: "Near-best (English)",
             recommendedUse: "Fastest high-accuracy English-only dictation; matches or beats Turbo on short clips.",
-            notes: "Distilled Whisper from a separate Hugging Face repo. English only; language locks to English automatically."
+            notes: "Distilled Whisper from a separate Hugging Face repo. English only; language locks to English automatically.",
+            speedRating: 7,
+            qualityRating: 9
         ),
         ManagedModelDescriptor(
             id: "whisper-large-v3",
@@ -200,7 +224,9 @@ enum ManagedModelCatalog {
             speedSummary: "Slowest",
             qualitySummary: "Best",
             recommendedUse: "Maximum transcription quality for users who do not mind a heavy local model.",
-            notes: "Pick this when transcript quality is more important than download size or latency."
+            notes: "Pick this when transcript quality is more important than download size or latency.",
+            speedRating: 2,
+            qualityRating: 10
         ),
     ]
 
@@ -216,7 +242,9 @@ enum ManagedModelCatalog {
             speedSummary: "Fast for an LLM",
             qualitySummary: "Good",
             recommendedUse: "Best first refinement model for local cleanup with manageable size.",
-            notes: "This is the most sensible one-click refinement download for the current app."
+            notes: "This is the most sensible one-click refinement download for the current app.",
+            speedRating: 6,
+            qualityRating: 6
         ),
         ManagedModelDescriptor(
             id: "phi-3-mini-fp16",
@@ -229,7 +257,9 @@ enum ManagedModelCatalog {
             speedSummary: "Heavy",
             qualitySummary: "Higher ceiling",
             recommendedUse: "Advanced refinement option if you want the largest official Phi-3 GGUF build.",
-            notes: "This version is much larger and should be treated as an opt-in quality upgrade."
+            notes: "This version is much larger and should be treated as an opt-in quality upgrade.",
+            speedRating: 2,
+            qualityRating: 8
         ),
     ]
     static let vadModels: [ManagedModelDescriptor] = [
