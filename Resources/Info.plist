@@ -36,5 +36,11 @@
     <string>Voice records audio from your microphone to transcribe speech locally via whisper.cpp.</string>
     <key>NSSupportsAutomaticGraphicsSwitching</key>
     <true/>
+    <key>SUFeedURL</key>
+    <string>https://github.com/rbmrs/voice/releases/latest/download/appcast.xml</string>
+    <key>SUPublicEDKey</key>
+    <string>Kc1j1bYQalPL4Gu/MgtD5ZbSGukmQY3TlkSwpphYYcs=</string>
+    <key>SUEnableInstallerLauncherService</key>
+    <true/>
 </dict>
 </plist>
