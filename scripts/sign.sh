@@ -25,6 +25,22 @@ find "$app" -name '*.bundle' -type d -print0 2>/dev/null | while IFS= read -r -d
   codesign --force --sign "$IDENTITY" "$b"
 done
 
+# Sign embedded Sparkle.framework inside-out (helpers first, then the framework) so the
+# app's --deep --strict verification passes. Voice is non-sandboxed, so Sparkle's XPC
+# services go unused; ad-hoc re-signing them without entitlements is fine.
+# ponytail: Developer ID signing would also need --options runtime --timestamp on these.
+fw="$app/Contents/Frameworks/Sparkle.framework"
+if [[ -d "$fw" ]]; then
+  echo "==> signing Sparkle.framework (inside-out)"
+  for inner in \
+    "$fw"/Versions/*/XPCServices/*.xpc(N) \
+    "$fw"/Versions/*/Updater.app(N) \
+    "$fw"/Versions/*/Autoupdate(N); do
+    codesign --force --sign "$IDENTITY" "$inner"
+  done
+  codesign --force --sign "$IDENTITY" "$fw"
+fi
+
 codesign --remove-signature "$app" 2>/dev/null || true
 
 sign_args=(--force --sign "$IDENTITY" --entitlements "$entitlements")
