@@ -135,24 +135,22 @@ private struct ManagedModelCard: View {
                 actionView
             }
 
-            ViewThatFits(in: .horizontal) {
+            VStack(alignment: .leading, spacing: 8) {
                 HStack(spacing: 6) {
                     ModelBadge(text: descriptor.sizeLabel)
                     ModelBadge(text: descriptor.languageSummary)
-                    ModelBadge(text: descriptor.speedSummary)
-                    ModelBadge(text: descriptor.qualitySummary)
                 }
 
-                Grid(horizontalSpacing: 6, verticalSpacing: 6) {
-                    GridRow {
-                        ModelBadge(text: descriptor.sizeLabel)
-                        ModelBadge(text: descriptor.languageSummary)
-                    }
+                if let speed = descriptor.speedRating {
+                    RatingGauge(label: "Speed", rating: speed, detail: descriptor.speedSummary)
+                } else {
+                    ModelBadge(text: descriptor.speedSummary)
+                }
 
-                    GridRow {
-                        ModelBadge(text: descriptor.speedSummary)
-                        ModelBadge(text: descriptor.qualitySummary)
-                    }
+                if let quality = descriptor.qualityRating {
+                    RatingGauge(label: "Accuracy", rating: quality, detail: descriptor.qualitySummary)
+                } else {
+                    ModelBadge(text: descriptor.qualitySummary)
                 }
             }
 
@@ -270,5 +268,33 @@ private struct ModelBadge: View {
             .padding(.horizontal, 7)
             .padding(.vertical, 4)
             .background(Capsule().fill(Color(nsColor: .windowBackgroundColor)))
+    }
+}
+
+/// A labeled 1...`total` segmented bar. `detail` is the original prose rating, surfaced on hover.
+private struct RatingGauge: View {
+    let label: String
+    let rating: Int
+    let detail: String
+    var total: Int = 10
+
+    var body: some View {
+        HStack(spacing: 7) {
+            Text(label)
+                .font(.caption2.weight(.medium))
+                .foregroundStyle(.secondary)
+                .frame(width: 56, alignment: .leading)
+
+            HStack(spacing: 2) {
+                ForEach(0..<total, id: \.self) { index in
+                    Capsule()
+                        .fill(index < rating
+                            ? Color.accentColor
+                            : Color(nsColor: .separatorColor).opacity(0.4))
+                        .frame(height: 5)
+                }
+            }
+        }
+        .help("\(label): \(detail)")
     }
 }
