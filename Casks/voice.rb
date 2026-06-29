@@ -22,7 +22,7 @@ cask "voice" do
     strategy :github_latest
   end
 
-  auto_updates false
+  auto_updates true
   depends_on macos: ">= :sonoma"
   depends_on formula: "whisper-cpp"
   depends_on formula: "llama.cpp"
