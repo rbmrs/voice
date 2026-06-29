@@ -58,13 +58,7 @@ struct UpdatesSettingsView: View {
     }
 
     private var versionText: String {
-        let info = Bundle.main.infoDictionary
-        let short = info?["CFBundleShortVersionString"] as? String ?? "—"
-        let build = info?["CFBundleVersion"] as? String
-        if let build, !build.isEmpty {
-            return "\(short) (\(build))"
-        }
-        return short
+        Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "—"
     }
 
     private var lastChecked: String? {
