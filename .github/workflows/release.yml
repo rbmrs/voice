@@ -73,10 +73,28 @@ jobs:
           echo "sha=$SHA" >> "$GITHUB_OUTPUT"
           echo "$SHA  $DMG"
 
+      - name: Sign update & generate appcast
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+          BUILD: ${{ github.run_number }}
+          SUMMARY: ${{ steps.summary.outputs.summary }}
+          SPARKLE_PRIVATE_KEY: ${{ secrets.SPARKLE_PRIVATE_KEY }}
+        run: |
+          if [ -z "${SPARKLE_PRIVATE_KEY:-}" ]; then
+            echo "::warning::SPARKLE_PRIVATE_KEY secret not set — skipping appcast. In-app updates"
+            echo "::warning::won't be offered until you add the secret (see release docs). DMG still ships."
+            exit 0
+          fi
+          zsh scripts/make-appcast.sh
+
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          files: dist/Voice-${{ steps.version.outputs.version }}.dmg
+          # appcast.xml is absent only when the Sparkle secret is unset; don't fail the release.
+          files: |
+            dist/Voice-${{ steps.version.outputs.version }}.dmg
+            dist/appcast.xml
+          fail_on_unmatched_files: false
           tag_name: ${{ github.ref_name }}
           name: ${{ github.ref_name }}
           generate_release_notes: true
