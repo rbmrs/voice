@@ -58,5 +58,15 @@ for bundle in "$bin_path"/*.bundle(N); do
   cp -R "$bundle" "$app/Contents/Resources/"
 done
 
+# Embed Sparkle.framework (the auto-updater). SwiftPM stages it in the bin path.
+# The executable finds it via the @executable_path/../Frameworks rpath set in Package.swift.
+if [[ -d "$bin_path/Sparkle.framework" ]]; then
+  echo "==> embedding Sparkle.framework"
+  mkdir -p "$app/Contents/Frameworks"
+  ditto "$bin_path/Sparkle.framework" "$app/Contents/Frameworks/Sparkle.framework"
+else
+  echo "WARNING: Sparkle.framework not at $bin_path — in-app updates will be disabled"
+fi
+
 echo "==> done: $app"
 ls -la "$app/Contents"
