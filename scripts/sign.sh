@@ -43,8 +43,12 @@ fi
 
 codesign --remove-signature "$app" 2>/dev/null || true
 
+# Hardened runtime + secure timestamp are only for Developer ID + notarization. A self-signed
+# identity must NOT use hardened runtime: its library validation would reject the self-signed
+# Sparkle.framework (no Team ID). Default off; set HARDENED=1 for a future Developer ID flow.
+HARDENED=${HARDENED:-0}
 sign_args=(--force --sign "$IDENTITY" --entitlements "$entitlements")
-if [[ "$IDENTITY" != "-" ]]; then
+if [[ "$HARDENED" == "1" ]]; then
   sign_args+=(--options runtime --timestamp)
 fi
 
