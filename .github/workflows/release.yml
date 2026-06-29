@@ -56,7 +56,35 @@ jobs:
           UNIVERSAL: "1"
         run: zsh scripts/build-app.sh
 
-      - name: Ad-hoc sign .app
+      - name: Import signing certificate
+        id: signing
+        env:
+          MACOS_CERT_P12: ${{ secrets.MACOS_CERT_P12 }}
+          MACOS_CERT_PASSWORD: ${{ secrets.MACOS_CERT_PASSWORD }}
+        run: |
+          if [ -z "$MACOS_CERT_P12" ]; then
+            echo "::warning::MACOS_CERT_P12 not set — using ad-hoc signing; app permissions will"
+            echo "::warning::reset on every update until the self-signed cert secret is added."
+            echo "identity=-" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          KC="$RUNNER_TEMP/voice-signing.keychain-db"
+          KCPW=$(openssl rand -base64 16)
+          security create-keychain -p "$KCPW" "$KC"
+          security set-keychain-settings -lut 21600 "$KC"
+          security unlock-keychain -p "$KCPW" "$KC"
+          echo "$MACOS_CERT_P12" | base64 --decode > "$RUNNER_TEMP/cert.p12"
+          security import "$RUNNER_TEMP/cert.p12" -P "$MACOS_CERT_PASSWORD" -k "$KC" -T /usr/bin/codesign
+          rm -f "$RUNNER_TEMP/cert.p12"
+          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$KCPW" "$KC" >/dev/null
+          # Make our keychain searchable so codesign finds the identity.
+          security list-keychains -d user -s "$KC" $(security list-keychains -d user | sed 's/"//g')
+          echo "identity=Voice Self-Signed" >> "$GITHUB_OUTPUT"
+          echo "imported self-signed certificate ✓"
+
+      - name: Sign .app
+        env:
+          IDENTITY: ${{ steps.signing.outputs.identity }}
         run: zsh scripts/sign.sh
 
       - name: Build DMG
