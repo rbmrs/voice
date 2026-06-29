@@ -11,6 +11,7 @@ final class AppCoordinator: ObservableObject {
 
     let settings: AppSettings
     let modelLibrary: ModelLibrary
+    let updater: UpdaterService
 
     private let permissionService: PermissionService
     private let audioCaptureService: AudioCaptureService
@@ -27,6 +28,7 @@ final class AppCoordinator: ObservableObject {
     init(
         settings: AppSettings = AppSettings(),
         modelLibrary: ModelLibrary = ModelLibrary(),
+        updater: UpdaterService = UpdaterService(),
         permissionService: PermissionService = PermissionService(),
         audioCaptureService: AudioCaptureService = AudioCaptureService(),
         transcriber: SpeechTranscribing = WhisperCppTranscriber(),
@@ -37,6 +39,7 @@ final class AppCoordinator: ObservableObject {
     ) {
         self.settings = settings
         self.modelLibrary = modelLibrary
+        self.updater = updater
         self.permissionService = permissionService
         self.audioCaptureService = audioCaptureService
         self.transcriber = transcriber
