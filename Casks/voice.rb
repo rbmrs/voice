@@ -23,7 +23,7 @@ cask "voice" do
   end
 
   auto_updates true
-  depends_on macos: ">= :sonoma"
+  depends_on macos: :sonoma
   depends_on formula: "whisper-cpp"
   depends_on formula: "llama.cpp"
 
