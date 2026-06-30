@@ -13,3 +13,6 @@ __pycache__/
 Resources/AppIcon.icns
 *.dmg
 *.zip
+
+# Riptide artifacts (cloud-synced)
+.humanlayer/tasks/
