@@ -54,13 +54,15 @@ final class PermissionService {
         }
     }
 
-    /// Clears any stale TCC entry for this app, then prompts for fresh Accessibility access.
+    /// Prompts for Accessibility access, clearing a stale TCC entry first only if needed.
     ///
-    /// Voice is ad-hoc signed, so every release carries a new code-signature hash.
-    /// macOS caches Accessibility grants against that hash — after an update the stored
-    /// grant no longer matches and `AXIsProcessTrusted()` silently returns false without
-    /// re-prompting. Resetting the TCC entry first ensures the system prompt always fires.
+    /// Release builds are signed with a stable self-signed identity (see
+    /// scripts/gen-signing-cert.sh), so a granted permission normally survives updates and
+    /// must NOT be reset — that would force the user to re-grant for no reason. The reset is
+    /// only useful when not currently trusted: it clears a grant left over from an earlier
+    /// signing identity (e.g. migrating off the old ad-hoc builds) so the system prompt fires.
     func promptForAccessibilityAccess() -> Bool {
+        if AXIsProcessTrusted() { return true }
         resetAccessibilityTCCEntry()
         let options = ["AXTrustedCheckOptionPrompt": true] as CFDictionary
         return AXIsProcessTrustedWithOptions(options)
