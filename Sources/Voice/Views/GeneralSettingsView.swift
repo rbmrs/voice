@@ -1,4 +1,5 @@
 import KeyboardShortcuts
+import ServiceManagement
 import SwiftUI
 
 struct GeneralSettingsView: View {
@@ -6,6 +7,7 @@ struct GeneralSettingsView: View {
 
     @ObservedObject var coordinator: AppCoordinator
     @ObservedObject var settings: AppSettings
+    @State private var launchAtLogin = SMAppService.mainApp.status == .enabled
 
     var body: some View {
         SettingsPage(title: "General") {
@@ -51,8 +53,37 @@ struct GeneralSettingsView: View {
                     .pickerStyle(.menu)
                 }
             }
+
+            SettingsRowDivider()
+
+            SettingsRow(title: "Launch at Login", labelWidth: 132) {
+                TrailingControlColumn(width: controlColumnWidth) {
+                    Toggle("", isOn: launchAtLoginBinding)
+                        .labelsHidden()
+                        .toggleStyle(.switch)
+                }
+            }
         }
         .frame(maxWidth: .infinity, alignment: .top)
+    }
+
+    private var launchAtLoginBinding: Binding<Bool> {
+        Binding(
+            get: { launchAtLogin },
+            set: { enabled in
+                do {
+                    if enabled {
+                        try SMAppService.mainApp.register()
+                    } else {
+                        try SMAppService.mainApp.unregister()
+                    }
+                    launchAtLogin = SMAppService.mainApp.status == .enabled
+                } catch {
+                    NSLog("Launch at login toggle failed: \(error.localizedDescription)")
+                    launchAtLogin = SMAppService.mainApp.status == .enabled
+                }
+            }
+        )
     }
 
     private var permissionsCard: some View {
