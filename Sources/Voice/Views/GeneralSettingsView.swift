@@ -53,16 +53,6 @@ struct GeneralSettingsView: View {
                     .pickerStyle(.menu)
                 }
             }
-
-            SettingsRowDivider()
-
-            SettingsRow(title: "Launch at Login", labelWidth: 132) {
-                TrailingControlColumn(width: controlColumnWidth) {
-                    Toggle("", isOn: launchAtLoginBinding)
-                        .labelsHidden()
-                        .toggleStyle(.switch)
-                }
-            }
         }
         .frame(maxWidth: .infinity, alignment: .top)
     }
@@ -111,8 +101,33 @@ struct GeneralSettingsView: View {
                     }
                 }
             )
+
+            SettingsRowDivider()
+
+            launchAtLoginRow
         }
         .frame(maxWidth: .infinity, alignment: .top)
+    }
+
+    private var launchAtLoginRow: some View {
+        HStack(spacing: 10) {
+            Image(systemName: launchAtLogin ? "checkmark.circle.fill" : "circle")
+                .foregroundStyle(launchAtLogin ? .green : .secondary)
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text("Launch at Login")
+                Text(launchAtLogin ? "Enabled" : "Disabled")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
+            Spacer()
+
+            Toggle("", isOn: launchAtLoginBinding)
+                .labelsHidden()
+                .toggleStyle(.switch)
+        }
+        .frame(minHeight: 34)
     }
 
     private func permissionRow(
