@@ -34,7 +34,7 @@ final class HeuristicTextRefiner: TextRefining {
 
 final class LlamaCppTextRefiner: TextRefining {
     private let runner: ShellCommandRunner
-    private static let timeoutSeconds: TimeInterval = 45
+    private static let timeoutSeconds: TimeInterval = 180
 
     init(runner: ShellCommandRunner = ShellCommandRunner()) {
         self.runner = runner
