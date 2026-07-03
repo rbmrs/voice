@@ -35,7 +35,16 @@ final class WhisperCppTranscriber: SpeechTranscribing {
         // clips and suppresses Whisper's tendency to hallucinate text on leading/trailing
         // silence. Only added when the user enabled it and a Silero model is present.
         if settings.isVADActive {
-            arguments.append(contentsOf: ["--vad", "--vad-model", settings.vadModelPath])
+            // whisper.cpp's VAD defaults target long-form audio and clip dictation: they drop
+            // sub-250ms words, discard quiet speech (thold 0.5), and pad only 30ms so word edges
+            // get chopped. Bias toward keeping speech.
+            // ponytail: calibration knobs — surface in Settings only if per-voice tuning is needed.
+            arguments.append(contentsOf: [
+                "--vad", "--vad-model", settings.vadModelPath,
+                "--vad-threshold", "0.30",
+                "--vad-min-speech-duration-ms", "100",
+                "--vad-speech-pad-ms", "200",
+            ])
         }
 
         let result = try await runner.run(
