@@ -49,10 +49,12 @@ struct UpdatesSettingsView: View {
             }
         }
         .onAppear {
-            // Opening the Updates pane quietly checks (when auto-updates is on) and prompts only
-            // if there's a new version — same trigger as launch, no "up to date" dialog.
-            if updater.automaticallyUpdates {
-                updater.checkForUpdatesInBackground()
+            // Opening the Updates pane fake-clicks "Check for Updates…" so the interactive update
+            // window shows right away when a new version exists. The background check used at launch
+            // runs in silent auto-download mode and never surfaces that window. Gated like the button
+            // (canCheckForUpdates) so dev builds with no feed don't pop Sparkle's error dialog.
+            if updater.canCheckForUpdates {
+                updater.checkForUpdates()
             }
         }
     }
