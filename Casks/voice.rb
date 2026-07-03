@@ -9,8 +9,8 @@
 # not `homebrew-voice`. See https://docs.brew.sh/Taps.
 
 cask "voice" do
-  version "0.1.21"
-  sha256 "7b5fd9ad205ae098b2e37bb1979eda98686ab858bb0a682e7972c5061efb1661"
+  version "0.1.22"
+  sha256 "bf3ee8804308bf63087581c3f7d25f8c622f40c392aa8c3298b4cbc4d3176fd9"
 
   url "https://github.com/rbmrs/voice/releases/download/v#{version}/Voice-#{version}.dmg"
   name "Voice"
