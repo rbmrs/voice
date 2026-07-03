@@ -12,6 +12,9 @@ final class UpdaterService: ObservableObject {
     /// True once Sparkle is idle and able to start a check — drives the button's enabled state.
     @Published private(set) var canCheckForUpdates = false
 
+    /// Whether the bundle has a real update feed (false under `swift run`).
+    private let isConfigured: Bool
+
     private var updater: SPUUpdater { controller.updater }
 
     init() {
@@ -20,6 +23,7 @@ final class UpdaterService: ObservableObject {
         // pops a modal "no feed URL" error — so in dev we create it stopped and the UI degrades
         // to a disabled button.
         let isConfigured = Bundle.main.object(forInfoDictionaryKey: "SUFeedURL") != nil
+        self.isConfigured = isConfigured
         controller = SPUStandardUpdaterController(
             startingUpdater: isConfigured,
             updaterDelegate: nil,
@@ -45,5 +49,15 @@ final class UpdaterService: ObservableObject {
 
     func checkForUpdates() {
         updater.checkForUpdates()
+    }
+
+    /// Silent check used on app launch and when the Updates pane opens. Unlike `checkForUpdates()`,
+    /// this only surfaces UI when an update is actually available — no "you're up to date" dialog —
+    /// which is the industry-standard "check quietly, prompt only when there's something" behavior.
+    /// No-op in dev builds with no feed. Sparkle coalesces overlapping checks, so calling it on both
+    /// launch and pane-open is safe.
+    func checkForUpdatesInBackground() {
+        guard isConfigured else { return }
+        updater.checkForUpdatesInBackground()
     }
 }

@@ -48,6 +48,13 @@ struct UpdatesSettingsView: View {
                 }
             }
         }
+        .onAppear {
+            // Opening the Updates pane quietly checks (when auto-updates is on) and prompts only
+            // if there's a new version — same trigger as launch, no "up to date" dialog.
+            if updater.automaticallyUpdates {
+                updater.checkForUpdatesInBackground()
+            }
+        }
     }
 
     private var automaticBinding: Binding<Bool> {

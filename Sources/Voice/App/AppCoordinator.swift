@@ -51,6 +51,12 @@ final class AppCoordinator: ObservableObject {
 
         settings.autoHealToolPaths()
         registerHotkeys()
+
+        // Industry-standard launch check: if the user opted into automatic updates, quietly look
+        // for a new version on every launch and prompt only when one is available.
+        if updater.automaticallyUpdates {
+            updater.checkForUpdatesInBackground()
+        }
     }
 
     var canStart: Bool {
