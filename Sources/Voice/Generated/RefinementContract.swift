@@ -46,7 +46,7 @@ enum RefinementProfile: String, CaseIterable, Identifiable {
 enum RefinementContract {
     static let defaultProfile = RefinementProfile.balanced
     static let promptTemplate = "You are a local dictation refinement engine.\nFollow every rule exactly:\n- Preserve the speaker's meaning.\n- Keep the original language.\n- Fix punctuation and capitalization.\n- Remove filler words and obvious false starts.\n{contentRule}\n- Return only the cleaned dictation as plain text.\n- Do not repeat the instructions or raw dictation.\n\nTone profile:\n{instructions}\n\nRaw dictation:\n{rawText}\n\nCleaned dictation:\n"
-    static let llamaArguments: [String] = ["-n", "128", "-no-cnv", "--simple-io", "--no-warmup", "--temp", "0", "--top-k", "1"]
+    static let llamaArguments: [String] = ["-n", "-1", "-c", "0", "-no-cnv", "--simple-io", "--no-warmup", "--temp", "0", "--top-k", "1"]
     static let sentinelLines: [String] = ["[end of text]", "<|endoftext|>", "<end_of_turn>", "</s>"]
     static let headerSkipPrefixes: [String] = ["### ", "You are a local dictation", "Tone profile:", "Raw dictation:"]
 
