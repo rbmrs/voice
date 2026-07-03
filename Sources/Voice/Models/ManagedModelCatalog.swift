@@ -232,6 +232,36 @@ enum ManagedModelCatalog {
 
     static let refinementModels: [ManagedModelDescriptor] = [
         ManagedModelDescriptor(
+            id: "gemma-3-4b-it-q4",
+            engine: .llama,
+            title: "Gemma 3 4B Instruct Q4",
+            fileName: "gemma-3-4b-it-Q4_K_M.gguf",
+            sourceURL: URL(string: "https://huggingface.co/lmstudio-community/gemma-3-4B-it-GGUF/resolve/main/gemma-3-4b-it-Q4_K_M.gguf")!,
+            sizeBytes: 2_489_757_856,
+            languageSummary: "Multilingual",
+            speedSummary: "Fast for an LLM",
+            qualitySummary: "Very good",
+            recommendedUse: "Recommended refinement model: follows the cleanup instructions closely and rarely adds stray commentary.",
+            notes: "Google Gemma 3 4B instruct. Strong instruction-following makes for cleaner dictation with fewer artifacts than Phi-3.",
+            speedRating: 6,
+            qualityRating: 8
+        ),
+        ManagedModelDescriptor(
+            id: "qwen3-4b-instruct-2507-q4",
+            engine: .llama,
+            title: "Qwen3 4B Instruct Q4",
+            fileName: "Qwen_Qwen3-4B-Instruct-2507-Q4_K_M.gguf",
+            sourceURL: URL(string: "https://huggingface.co/bartowski/Qwen_Qwen3-4B-Instruct-2507-GGUF/resolve/main/Qwen_Qwen3-4B-Instruct-2507-Q4_K_M.gguf")!,
+            sizeBytes: 2_497_280_736,
+            languageSummary: "Multilingual",
+            speedSummary: "Fast for an LLM",
+            qualitySummary: "Very good",
+            recommendedUse: "Strong Apache-2.0 alternative to Gemma with excellent text quality across languages.",
+            notes: "Alibaba Qwen3 4B Instruct (2507, non-thinking build). Clean, direct output that suits the refinement pass.",
+            speedRating: 6,
+            qualityRating: 8
+        ),
+        ManagedModelDescriptor(
             id: "phi-3-mini-q4",
             engine: .llama,
             title: "Phi-3 Mini 4K Instruct Q4",
