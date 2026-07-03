@@ -261,6 +261,38 @@ enum ManagedModelCatalog {
             speedRating: 6,
             qualityRating: 8
         ),
+        // Lighter, faster refinement models — less memory and quicker cold-load than the 4B pair,
+        // with clean output verified in the app's greedy pipeline.
+        ManagedModelDescriptor(
+            id: "gemma-3-1b-it-q4",
+            engine: .llama,
+            title: "Gemma 3 1B Instruct Q4",
+            fileName: "gemma-3-1b-it-Q4_K_M.gguf",
+            sourceURL: URL(string: "https://huggingface.co/lmstudio-community/gemma-3-1b-it-GGUF/resolve/main/gemma-3-1b-it-Q4_K_M.gguf")!,
+            sizeBytes: 806_058_240,
+            languageSummary: "Multilingual",
+            speedSummary: "Very fast",
+            qualitySummary: "Good",
+            recommendedUse: "Lighter alternative to Gemma 3 4B: about a third of the memory with nearly as clean cleanup.",
+            notes: "Google Gemma 3 1B instruct. Verified to remove fillers and preserve meaning on everyday dictation.",
+            speedRating: 8,
+            qualityRating: 7
+        ),
+        ManagedModelDescriptor(
+            id: "qwen2-5-0-5b-instruct-q4",
+            engine: .llama,
+            title: "Qwen2.5 0.5B Instruct Q4",
+            fileName: "Qwen2.5-0.5B-Instruct-Q4_K_M.gguf",
+            sourceURL: URL(string: "https://huggingface.co/bartowski/Qwen2.5-0.5B-Instruct-GGUF/resolve/main/Qwen2.5-0.5B-Instruct-Q4_K_M.gguf")!,
+            sizeBytes: 397_808_192,
+            languageSummary: "Multilingual",
+            speedSummary: "Fastest",
+            qualitySummary: "Good",
+            recommendedUse: "Smallest usable refinement model: fastest cold-load and lowest memory, with clean everyday cleanup.",
+            notes: "Alibaba Qwen2.5 0.5B instruct (non-thinking). Chosen over Qwen3 0.6B, which leaked reasoning text into the refinement pass.",
+            speedRating: 9,
+            qualityRating: 6
+        ),
         ManagedModelDescriptor(
             id: "phi-3-mini-q4",
             engine: .llama,
