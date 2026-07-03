@@ -31,9 +31,9 @@ enum VoiceSmokeTests {
             SmokeTest(name: "Heuristic refiner removes fillers and adds punctuation", run: testHeuristicTextRefinerRemovesFillersAndAddsPunctuation),
             SmokeTest(name: "Heuristic refiner preserves sentence terminators", run: testHeuristicTextRefinerPreservesExistingSentenceTerminator),
             SmokeTest(name: "Heuristic refiner fails when only fillers remain", run: testHeuristicTextRefinerThrowsWhenOnlyFillersRemain),
-            SmokeTest(name: "Blog profile allows article expansion safely", run: testBlogProfilePromptAllowsSafeExpansion),
             SmokeTest(name: "Llama output cleanup strips prompt wrappers and sentinels", run: testExtractRefinedTextRemovesPromptQuotesAndSentinels),
             SmokeTest(name: "Llama executable fallback prefers llama-completion", run: testRefinementExecutablePrefersLlamaCompletionWhenAvailable),
+            SmokeTest(name: "Custom profile drives resolved prompt and survives reload", run: testCustomProfileResolvesAndPersists),
         ]
 
         var failures: [String] = []
@@ -203,26 +203,41 @@ enum VoiceSmokeTests {
         try expectEqual(cleaned, "Hello there.", "Llama output cleanup should strip quotes and sentinel markers.")
     }
 
-    private static func testBlogProfilePromptAllowsSafeExpansion() async throws {
-        let blogPrompt = LlamaCppTextRefiner.buildPrompt(rawText: "raw input", profile: .blog)
-        let balancedPrompt = LlamaCppTextRefiner.buildPrompt(rawText: "raw input", profile: .balanced)
+    private static func testCustomProfileResolvesAndPersists() async throws {
+        let fixture = makeDefaultsFixture(prefix: "AppSettingsCustomProfile")
+        defer { fixture.reset() }
 
-        try expect(
-            blogPrompt.contains("Expand terse phrasing into fuller article-style prose."),
-            "Blog profile should explicitly allow article-style expansion."
+        let settings = AppSettings(defaults: fixture.defaults)
+        let customPrompt = "Rewrite as terse lowercase Slack messages, no emoji."
+        let id = settings.upsertCustomProfile(id: nil, name: "Slack", prompt: customPrompt)
+
+        // Selecting the custom profile drives the resolved instructions and the built prompt.
+        try expectEqual(settings.resolvedRefinement.instructions, customPrompt, "Custom profile should supply its prompt as the tone instructions.")
+        try expectEqual(settings.selectedProfileTitle, "Slack", "Selected profile title should be the custom name.")
+        let prompt = RefinementContract.prompt(
+            rawText: "hey there",
+            instructions: settings.resolvedRefinement.instructions,
+            contentRule: settings.resolvedRefinement.contentRule
         )
-        try expect(
-            blogPrompt.contains("Do not invent facts, examples, data, quotes, names, or claims."),
-            "Blog profile should prevent invented supporting details."
-        )
-        try expect(
-            !blogPrompt.contains("Do not add explanations, lists, or extra content."),
-            "Blog profile should not keep the non-expansion rule."
-        )
-        try expect(
-            balancedPrompt.contains("Do not add explanations, lists, or extra content."),
-            "Balanced profile should keep the non-expansion rule."
-        )
+        try expect(prompt.contains("Tone profile:\n\(customPrompt)"), "Custom prompt should land in the tone profile slot.")
+
+        // The custom guardrail is the balanced content rule.
+        try expectEqual(settings.resolvedRefinement.contentRule, RefinementProfile.balanced.contentRule, "Custom profile should reuse the balanced content guardrail.")
+
+        // Persists across a reload of AppSettings backed by the same defaults.
+        let reloaded = AppSettings(defaults: fixture.defaults)
+        try expectEqual(reloaded.customProfiles.count, 1, "Custom profile should persist across reload.")
+        try expectEqual(reloaded.selectedCustomProfileID, id, "Selected custom profile should persist across reload.")
+
+        // Selecting a built-in clears the custom override.
+        reloaded.selectBuiltIn(.literal)
+        try expectEqual(reloaded.resolvedRefinement.instructions, RefinementProfile.literal.instructions, "Selecting a built-in should override the custom selection.")
+
+        // Deleting the profile drops the selection and falls back to the built-in.
+        reloaded.selectedCustomProfileID = id
+        reloaded.deleteCustomProfile(id)
+        try expect(reloaded.selectedCustomProfileID == nil, "Deleting the selected profile should clear the selection.")
+        try expect(reloaded.customProfiles.isEmpty, "Deleting the profile should remove it.")
     }
 
     private static func testRefinementExecutablePrefersLlamaCompletionWhenAvailable() async throws {

@@ -80,6 +80,20 @@ enum RefinementBackend: String, CaseIterable, Identifiable {
 // into Sources/Voice/Generated/RefinementContract.swift — the shared
 // refinement contract both this app and tools/voice-cli/voice.py derive from.
 
+/// A user-created refinement profile. Its `prompt` slots into the shared prompt
+/// template's tone section (see `RefinementContract`); app-only, not in the CLI.
+struct CustomProfile: Codable, Identifiable, Hashable {
+    let id: UUID
+    var name: String
+    var prompt: String
+
+    init(id: UUID = UUID(), name: String, prompt: String) {
+        self.id = id
+        self.name = name
+        self.prompt = prompt
+    }
+}
+
 @MainActor
 final class AppSettings: ObservableObject {
     private static let unsetPreferredWhisperLanguageCode = ""
@@ -120,6 +134,8 @@ final class AppSettings: ObservableObject {
     @Published var enableRefinement: Bool
     @Published var refinementBackend: RefinementBackend
     @Published var refinementProfile: RefinementProfile
+    @Published var customProfiles: [CustomProfile]
+    @Published var selectedCustomProfileID: UUID?
     @Published var llamaExecutablePath: String
     @Published var llamaModelPath: String
 
@@ -293,7 +309,14 @@ final class AppSettings: ObservableObject {
         vadModelPath = defaults.string(forKey: Keys.vadModelPath.rawValue) ?? ""
         enableRefinement = defaults.object(forKey: Keys.enableRefinement.rawValue) as? Bool ?? true
         refinementBackend = RefinementBackend(rawValue: defaults.string(forKey: Keys.refinementBackend.rawValue) ?? "") ?? .heuristic
-        refinementProfile = RefinementProfile(rawValue: defaults.string(forKey: Keys.refinementProfile.rawValue) ?? "") ?? .balanced
+        let storedProfile = defaults.string(forKey: Keys.refinementProfile.rawValue) ?? ""
+        // "email" was renamed to "professional"; retired profiles fall back to balanced.
+        refinementProfile = RefinementProfile(rawValue: storedProfile == "email" ? "professional" : storedProfile) ?? .balanced
+        let loadedProfiles = Self.decodeCustomProfiles(defaults.data(forKey: Keys.customProfiles.rawValue))
+        customProfiles = loadedProfiles
+        let storedSelectedID = defaults.string(forKey: Keys.selectedCustomProfileID.rawValue).flatMap(UUID.init(uuidString:))
+        // Drop a stale selection if the profile it points at is gone.
+        selectedCustomProfileID = loadedProfiles.contains { $0.id == storedSelectedID } ? storedSelectedID : nil
         llamaExecutablePath = defaults.string(forKey: Keys.llamaExecutablePath.rawValue) ?? Self.defaultExecutablePath(named: "llama-cli")
         llamaModelPath = defaults.string(forKey: Keys.llamaModelPath.rawValue) ?? ""
 
@@ -356,6 +379,14 @@ final class AppSettings: ObservableObject {
             .sink { [defaults] in defaults.set($0, forKey: Keys.refinementProfile.rawValue) }
             .store(in: &cancellables)
 
+        $customProfiles
+            .sink { [defaults] in defaults.set(try? JSONEncoder().encode($0), forKey: Keys.customProfiles.rawValue) }
+            .store(in: &cancellables)
+
+        $selectedCustomProfileID
+            .sink { [defaults] in defaults.set($0?.uuidString, forKey: Keys.selectedCustomProfileID.rawValue) }
+            .store(in: &cancellables)
+
         $llamaExecutablePath
             .sink { [defaults] in defaults.set($0, forKey: Keys.llamaExecutablePath.rawValue) }
             .store(in: &cancellables)
@@ -363,6 +394,64 @@ final class AppSettings: ObservableObject {
         $llamaModelPath
             .sink { [defaults] in defaults.set($0, forKey: Keys.llamaModelPath.rawValue) }
             .store(in: &cancellables)
+    }
+
+    // MARK: - Refinement profile resolution
+
+    /// The tone instructions + content rule for whichever profile is active.
+    /// A selected custom profile overrides the built-in; it reuses the balanced
+    /// guardrail so custom tones still can't add content or answer questions.
+    var resolvedRefinement: (instructions: String, contentRule: String) {
+        if let profile = selectedCustomProfile {
+            return (profile.prompt, RefinementProfile.balanced.contentRule)
+        }
+        return (refinementProfile.instructions, refinementProfile.contentRule)
+    }
+
+    var selectedCustomProfile: CustomProfile? {
+        guard let id = selectedCustomProfileID else { return nil }
+        return customProfiles.first { $0.id == id }
+    }
+
+    var selectedProfileTitle: String {
+        selectedCustomProfile?.name ?? refinementProfile.title
+    }
+
+    func selectBuiltIn(_ profile: RefinementProfile) {
+        refinementProfile = profile
+        selectedCustomProfileID = nil
+    }
+
+    /// Adds a new custom profile (when `id` is nil) or edits an existing one,
+    /// then selects it. Returns the profile id.
+    @discardableResult
+    func upsertCustomProfile(id: UUID?, name: String, prompt: String) -> UUID {
+        let trimmedName = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmedPrompt = prompt.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        if let id, let index = customProfiles.firstIndex(where: { $0.id == id }) {
+            customProfiles[index].name = trimmedName
+            customProfiles[index].prompt = trimmedPrompt
+            selectedCustomProfileID = id
+            return id
+        }
+
+        let profile = CustomProfile(name: trimmedName, prompt: trimmedPrompt)
+        customProfiles.append(profile)
+        selectedCustomProfileID = profile.id
+        return profile.id
+    }
+
+    func deleteCustomProfile(_ id: UUID) {
+        customProfiles.removeAll { $0.id == id }
+        if selectedCustomProfileID == id {
+            selectedCustomProfileID = nil
+        }
+    }
+
+    private static func decodeCustomProfiles(_ data: Data?) -> [CustomProfile] {
+        guard let data else { return [] }
+        return (try? JSONDecoder().decode([CustomProfile].self, from: data)) ?? []
     }
 
     private static func defaultExecutablePath(named name: String) -> String {
@@ -474,6 +563,8 @@ final class AppSettings: ObservableObject {
         case enableRefinement
         case refinementBackend
         case refinementProfile
+        case customProfiles
+        case selectedCustomProfileID
         case llamaExecutablePath
         case llamaModelPath
     }

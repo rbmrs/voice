@@ -41,7 +41,12 @@ final class LlamaCppTextRefiner: TextRefining {
     }
 
     func refine(_ text: String, settings: AppSettings) async throws -> String {
-        let prompt = Self.buildPrompt(rawText: text, profile: settings.refinementProfile)
+        let refinement = settings.resolvedRefinement
+        let prompt = RefinementContract.prompt(
+            rawText: text,
+            instructions: refinement.instructions,
+            contentRule: refinement.contentRule
+        )
         let executable = Self.refinementExecutable(from: settings.llamaExecutablePath)
 
         let result = try await runner.run(
@@ -170,6 +175,18 @@ final class LlamaCppTextRefiner: TextRefining {
         }
 
         return cleaned.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+}
+
+extension RefinementContract {
+    /// Builds the prompt from raw tone/content strings — used for custom profiles,
+    /// which supply their own `instructions` instead of a built-in `RefinementProfile`.
+    /// Mirrors the generated `prompt(rawText:profile:)` substitution.
+    static func prompt(rawText: String, instructions: String, contentRule: String) -> String {
+        promptTemplate
+            .replacingOccurrences(of: "{contentRule}", with: contentRule)
+            .replacingOccurrences(of: "{instructions}", with: instructions)
+            .replacingOccurrences(of: "{rawText}", with: rawText)
     }
 }
 

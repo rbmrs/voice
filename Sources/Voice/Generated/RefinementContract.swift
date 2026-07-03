@@ -5,55 +5,40 @@ import Foundation
 
 enum RefinementProfile: String, CaseIterable, Identifiable {
     case balanced
-    case email
-    case chat
-    case blog
+    case professional
     case literal
-    case polished
 
     var id: String { rawValue }
 
     var title: String {
         switch self {
         case .balanced: "Balanced"
-        case .email: "Professional"
-        case .chat: "Casual"
-        case .blog: "Blog"
+        case .professional: "Professional"
         case .literal: "Literal"
-        case .polished: "Polished"
         }
     }
 
     var description: String {
         switch self {
         case .balanced: "Cleans up dictation while keeping the original wording and meaning close to what you said."
-        case .email: "Turns dictation into polished, professional prose suitable for email drafts."
-        case .chat: "Keeps dictation casual and conversational while removing filler words and false starts."
-        case .blog: "Expands dictated thoughts into article-style paragraphs without inventing facts, data, or claims."
+        case .professional: "Turns dictation into polished, professional prose suitable for email drafts."
         case .literal: "Makes only the smallest edits needed for punctuation and capitalization, leaving wording untouched."
-        case .polished: "Makes the dictation read naturally while preserving the original meaning."
         }
     }
 
     var instructions: String {
         switch self {
         case .balanced: "Make the text read naturally and clearly without changing the meaning."
-        case .email: "Shape the text into polished, professional prose that feels ready for an email draft."
-        case .chat: "Keep the phrasing casual and conversational while removing dictation artifacts."
-        case .blog: "Expand dictated thoughts into polished article-style prose with a professional, readable tone."
+        case .professional: "Shape the text into polished, professional prose that feels ready for an email draft."
         case .literal: "Make the smallest edits necessary for punctuation and capitalization."
-        case .polished: "Make the dictation read naturally while preserving the original meaning."
         }
     }
 
     var contentRule: String {
         switch self {
         case .balanced: "- Do not add explanations, lists, or extra content."
-        case .email: "- Do not add explanations, lists, or extra content."
-        case .chat: "- Do not add explanations, lists, or extra content."
-        case .blog: "- Expand terse phrasing into fuller article-style prose.\n- Add connective wording, transitions, and light elaboration when it helps the text read like an article.\n- Do not invent facts, examples, data, quotes, names, or claims."
+        case .professional: "- Do not add explanations, lists, or extra content."
         case .literal: "- Do not add explanations, lists, or extra content."
-        case .polished: "- Do not add explanations, lists, or extra content."
         }
     }
 }

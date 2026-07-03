@@ -13,38 +13,17 @@
       "contentRule": "- Do not add explanations, lists, or extra content."
     },
     {
-      "id": "email",
+      "id": "professional",
       "title": "Professional",
       "description": "Turns dictation into polished, professional prose suitable for email drafts.",
       "instructions": "Shape the text into polished, professional prose that feels ready for an email draft.",
       "contentRule": "- Do not add explanations, lists, or extra content."
     },
     {
-      "id": "chat",
-      "title": "Casual",
-      "description": "Keeps dictation casual and conversational while removing filler words and false starts.",
-      "instructions": "Keep the phrasing casual and conversational while removing dictation artifacts.",
-      "contentRule": "- Do not add explanations, lists, or extra content."
-    },
-    {
-      "id": "blog",
-      "title": "Blog",
-      "description": "Expands dictated thoughts into article-style paragraphs without inventing facts, data, or claims.",
-      "instructions": "Expand dictated thoughts into polished article-style prose with a professional, readable tone.",
-      "contentRule": "- Expand terse phrasing into fuller article-style prose.\n- Add connective wording, transitions, and light elaboration when it helps the text read like an article.\n- Do not invent facts, examples, data, quotes, names, or claims."
-    },
-    {
       "id": "literal",
       "title": "Literal",
       "description": "Makes only the smallest edits needed for punctuation and capitalization, leaving wording untouched.",
       "instructions": "Make the smallest edits necessary for punctuation and capitalization.",
-      "contentRule": "- Do not add explanations, lists, or extra content."
-    },
-    {
-      "id": "polished",
-      "title": "Polished",
-      "description": "Makes the dictation read naturally while preserving the original meaning.",
-      "instructions": "Make the dictation read naturally while preserving the original meaning.",
       "contentRule": "- Do not add explanations, lists, or extra content."
     }
   ]

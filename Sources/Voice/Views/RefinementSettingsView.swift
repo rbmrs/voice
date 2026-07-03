@@ -8,6 +8,8 @@ struct RefinementSettingsView: View {
     @ObservedObject var settings: AppSettings
     @ObservedObject var modelLibrary: ModelLibrary
 
+    @State private var editorMode: ProfileEditorMode?
+
     var body: some View {
         SettingsPage(title: "Refinement") {
             cleanupCard
@@ -28,6 +30,9 @@ struct RefinementSettingsView: View {
                     )
                 }
             }
+        }
+        .sheet(item: $editorMode) { mode in
+            CustomProfileEditor(settings: settings, mode: mode)
         }
     }
 
@@ -61,17 +66,55 @@ struct RefinementSettingsView: View {
 
                     SettingsRow(title: "Profile") {
                         TrailingControlColumn(width: controlColumnWidth) {
-                            Picker("Profile", selection: $settings.refinementProfile) {
-                                ForEach(RefinementProfile.allCases) { profile in
-                                    Text(profile.title).tag(profile)
-                                }
-                            }
-                            .labelsHidden()
-                            .pickerStyle(.menu)
+                            profileMenu
                         }
                     }
                 }
             }
+        }
+    }
+
+    private var profileMenu: some View {
+        Menu {
+            ForEach(RefinementProfile.allCases) { profile in
+                Button {
+                    settings.selectBuiltIn(profile)
+                } label: {
+                    profileLabel(profile.title, selected: settings.selectedCustomProfileID == nil && settings.refinementProfile == profile)
+                }
+            }
+
+            if !settings.customProfiles.isEmpty {
+                Divider()
+
+                ForEach(settings.customProfiles) { profile in
+                    Button {
+                        settings.selectedCustomProfileID = profile.id
+                    } label: {
+                        profileLabel(profile.name, selected: settings.selectedCustomProfileID == profile.id)
+                    }
+                }
+            }
+
+            Divider()
+
+            Button("New Profile…") { editorMode = .new }
+
+            if let profile = settings.selectedCustomProfile {
+                Button("Edit “\(profile.name)”…") { editorMode = .edit(profile) }
+            }
+        } label: {
+            Text(settings.selectedProfileTitle)
+        }
+        .fixedSize()
+    }
+
+    @ViewBuilder
+    private func profileLabel(_ title: String, selected: Bool) -> some View {
+        if selected {
+            Label(title, systemImage: "checkmark")
+        } else {
+            Text(title)
         }
     }
 
