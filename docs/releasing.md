@@ -1,26 +1,20 @@
 # Releasing Voice
 
-## Signing certificate (already configured — do NOT regenerate casually)
+## Signing certificate (already configured — don't regenerate casually)
 
-macOS attributes Microphone + Accessibility grants to the app's code-signing
-identity. Ad-hoc signing has no stable identity, so every update would reset
-those permissions. Releases are therefore signed with one persistent
-self-signed cert, `Voice Self-Signed`.
+macOS pins Microphone + Accessibility grants to the app's signing identity, so
+releases are signed with one persistent self-signed cert (`Voice Self-Signed`)
+instead of ad-hoc — otherwise every update would reset those permissions.
 
-**This is already set up.** The `MACOS_CERT_P12` / `MACOS_CERT_PASSWORD` repo
-secrets were configured 2026-06-29; v0.1.14 onward are signed with this identity.
+Set up via the `MACOS_CERT_P12` / `MACOS_CERT_PASSWORD` repo secrets (v0.1.14+).
 Nothing to do per release.
 
-`scripts/gen-signing-cert.sh` is the bootstrap/recovery tool that minted that
-cert. **Only re-run it if the secret leaks** — every run mints a *new, different*
-cert, which forces a one-time permission reset for every existing user (the new
-cert no longer matches the requirement their grants are pinned to). It is not
-idempotent across the fleet.
+**Only re-run `scripts/gen-signing-cert.sh` if the secret leaks.** Each run mints
+a *new* cert, forcing a one-time permission reset for every existing user.
 
-> ⚠️ Backup status: the live cert's private key now exists **only** as the
-> `MACOS_CERT_P12` GitHub secret, which is write-only (cannot be read back). No
-> `.p12` backup remains on disk. If that secret is ever lost, the only path
-> forward is regenerating (and eating the one-time fleet permission reset).
+> ⚠️ The private key exists only as the write-only `MACOS_CERT_P12` secret — no
+> `.p12` backup on disk. If it's lost, regenerating (and the fleet-wide reset) is
+> the only path forward.
 
 ## Tagging a release
 
