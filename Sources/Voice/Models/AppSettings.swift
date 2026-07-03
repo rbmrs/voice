@@ -241,12 +241,14 @@ final class AppSettings: ObservableObject {
     }
 
     func cyclePreferredWhisperLanguage() -> PreferredWhisperLanguageCycleResult {
-        let cycleableLanguages: [String]
-        if isEnglishOnlyWhisperModel {
-            cycleableLanguages = configuredPreferredWhisperLanguages.filter { $0 == "en" }
-        } else {
-            cycleableLanguages = configuredPreferredWhisperLanguages
+        // An English-only Whisper model can't transcribe other languages, so the
+        // switch shortcut has nothing to cycle to — surface why instead of
+        // silently "switching" to English on every press.
+        guard !isEnglishOnlyWhisperModel else {
+            return .unavailable(preferredWhisperLanguageCycleUnavailableMessage)
         }
+
+        let cycleableLanguages = configuredPreferredWhisperLanguages
 
         guard !cycleableLanguages.isEmpty else {
             return .unavailable(preferredWhisperLanguageCycleUnavailableMessage)
@@ -488,12 +490,12 @@ final class AppSettings: ObservableObject {
     }
 
     private var preferredWhisperLanguageCycleUnavailableMessage: String {
-        if configuredPreferredWhisperLanguages.isEmpty {
-            return "Set Preferred Language 1 or 2 before using the switch-language shortcut."
+        if isEnglishOnlyWhisperModel {
+            return "This Whisper model is English-only, so it can't switch to another language. Choose a multilingual model to use the switch-language shortcut."
         }
 
-        if isEnglishOnlyWhisperModel {
-            return "This Whisper model appears to be English-only. Set a preferred language to English before using the switch-language shortcut."
+        if configuredPreferredWhisperLanguages.isEmpty {
+            return "Set Preferred Language 1 or 2 before using the switch-language shortcut."
         }
 
         return "No preferred languages are available for switching."
