@@ -80,18 +80,13 @@ struct UpdatesSettingsView: View {
             }
 
         case .available(let version):
-            VStack(alignment: .leading, spacing: 8) {
-                HStack(spacing: 8) {
-                    Image(systemName: "arrow.down.circle.fill").foregroundStyle(.blue)
-                    Text("Version \(version) is available.")
-                    Spacer(minLength: 12)
-                }
-                HStack(spacing: 8) {
-                    Spacer(minLength: 0)
-                    Button("Not Now") { updater.dismissUpdate() }
-                    Button("Install Update") { updater.installUpdate() }
-                        .keyboardShortcut(.defaultAction)
-                }
+            HStack(spacing: 8) {
+                Image(systemName: "arrow.down.circle.fill").foregroundStyle(.blue)
+                Text("Version \(version) is available.")
+                Spacer(minLength: 12)
+                Button("Not Now") { updater.dismissUpdate() }
+                Button("Install Update") { updater.installUpdate() }
+                    .keyboardShortcut(.defaultAction)
             }
 
         case .downloading(let fraction):
@@ -101,17 +96,12 @@ struct UpdatesSettingsView: View {
             inlineProgress(title: "Preparing update…", fraction: fraction)
 
         case .readyToInstall:
-            VStack(alignment: .leading, spacing: 8) {
-                HStack(spacing: 8) {
-                    Image(systemName: "checkmark.circle.fill").foregroundStyle(.green)
-                    Text("Update ready to install.")
-                    Spacer(minLength: 12)
-                }
-                HStack(spacing: 8) {
-                    Spacer(minLength: 0)
-                    Button("Restart & Install") { updater.installUpdate() }
-                        .keyboardShortcut(.defaultAction)
-                }
+            HStack(spacing: 8) {
+                Image(systemName: "checkmark.circle.fill").foregroundStyle(.green)
+                Text("Update ready to install.")
+                Spacer(minLength: 12)
+                Button("Restart & Install") { updater.installUpdate() }
+                    .keyboardShortcut(.defaultAction)
             }
 
         case .installing:
