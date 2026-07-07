@@ -59,11 +59,20 @@ final class SessionSpeechService: ObservableObject {
             guard let reply = session.lastReply, !reply.isEmpty else { continue }
             let tail = String(reply.suffix(120))
             guard lastSpokenTail[session.id] != tail else { continue }
-            lastSpokenTail[session.id] = tail
 
-            // Muted sessions still advance their tail above, so un-muting doesn't
+            // Muted sessions advance their tail silently, so un-muting doesn't
             // dump a stale reply.
-            guard settings.isSessionTracked(session.id) else { continue }
+            guard settings.isSessionTracked(session.id) else {
+                lastSpokenTail[session.id] = tail
+                continue
+            }
+
+            // A turn in progress appends to the transcript continuously (tool calls,
+            // interleaved text). Announce only after a few seconds of quiet — the
+            // polling equivalent of the Stop hook firing at turn end. Don't advance
+            // the tail yet: the reply gets announced on a later tick once quiet.
+            guard Date().timeIntervalSince(session.lastActivity) > 4 else { continue }
+            lastSpokenTail[session.id] = tail
 
             let llama = ReplySummarizer.LlamaConfiguration(
                 executablePath: settings.llamaExecutablePath,
