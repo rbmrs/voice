@@ -253,6 +253,9 @@ final class ModelLibrary: ObservableObject {
             if settings.llamaModelPath == path {
                 settings.llamaModelPath = ""
             }
+            if settings.speechLlamaModelPath == path {
+                settings.speechLlamaModelPath = ""
+            }
         case .vad:
             if settings.vadModelPath == path {
                 settings.vadModelPath = ""
