@@ -18,7 +18,7 @@ final class UpdaterService: NSObject, ObservableObject {
         case idle
         case checking
         case upToDate
-        case available(version: String)
+        case available(version: String, notes: String?)
         case downloading(fraction: Double?)
         case extracting(fraction: Double)
         case readyToInstall
@@ -126,7 +126,7 @@ extension UpdaterService: SPUUserDriver {
 
     func showUpdateFound(with appcastItem: SUAppcastItem, state: SPUUserUpdateState, reply: @escaping (SPUUserUpdateChoice) -> Void) {
         installReply = reply
-        phase = .available(version: appcastItem.displayVersionString)
+        phase = .available(version: appcastItem.displayVersionString, notes: appcastItem.itemDescription)
     }
 
     func showUpdateReleaseNotes(with downloadData: SPUDownloadData) {}
