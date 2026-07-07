@@ -90,9 +90,11 @@ final class ClaudeSessionMonitor: ObservableObject {
         return (cwd, entrypoint)
     }
 
-    /// Last assistant text message in the transcript. Reads only the file's tail —
-    /// transcripts grow to several MB and a turn's final text arrives as one line.
-    /// Same defensive parsing as `projectPath`.
+    /// Last announceable text in the transcript: an assistant reply, or the output a
+    /// slash-command skill piped back into the session (`<local-command-stdout>` — skills
+    /// run in forked sdk-cli sessions the monitor filters out, so their result only
+    /// surfaces here). Reads only the file's tail — transcripts grow to several MB and
+    /// a turn's final text arrives as one line. Same defensive parsing as `projectPath`.
     private func lastAssistantText(inTranscript url: URL) -> String? {
         guard let handle = try? FileHandle(forReadingFrom: url) else { return nil }
         defer { try? handle.close() }
@@ -108,16 +110,41 @@ final class ClaudeSessionMonitor: ObservableObject {
 
         for line in text.split(separator: "\n").reversed() {
             guard let obj = try? JSONSerialization.jsonObject(with: Data(line.utf8)) as? [String: Any],
-                  obj["type"] as? String == "assistant",
-                  let blocks = (obj["message"] as? [String: Any])?["content"] as? [[String: Any]] else { continue }
+                  let message = obj["message"] as? [String: Any] else { continue }
 
-            let reply = blocks
-                .filter { $0["type"] as? String == "text" }
-                .compactMap { $0["text"] as? String }
-                .joined()
-                .trimmingCharacters(in: .whitespacesAndNewlines)
-            if !reply.isEmpty {
-                return reply
+            switch obj["type"] as? String {
+            case "assistant":
+                guard let blocks = message["content"] as? [[String: Any]] else { continue }
+                let reply = blocks
+                    .filter { $0["type"] as? String == "text" }
+                    .compactMap { $0["text"] as? String }
+                    .joined()
+                    .trimmingCharacters(in: .whitespacesAndNewlines)
+                if !reply.isEmpty {
+                    return reply
+                }
+
+            case "user":
+                // User content is a plain string or text blocks depending on the entry.
+                var content = message["content"] as? String
+                if content == nil, let blocks = message["content"] as? [[String: Any]] {
+                    content = blocks
+                        .filter { $0["type"] as? String == "text" }
+                        .compactMap { $0["text"] as? String }
+                        .joined()
+                }
+                guard let content = content?.trimmingCharacters(in: .whitespacesAndNewlines),
+                      content.hasPrefix("<local-command-stdout>") else { continue }
+                let stripped = content
+                    .replacingOccurrences(of: "<local-command-stdout>", with: "")
+                    .replacingOccurrences(of: "</local-command-stdout>", with: "")
+                    .trimmingCharacters(in: .whitespacesAndNewlines)
+                if !stripped.isEmpty {
+                    return stripped
+                }
+
+            default:
+                continue
             }
         }
         return nil
