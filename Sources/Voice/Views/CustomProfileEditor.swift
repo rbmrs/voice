@@ -13,20 +13,30 @@ enum ProfileEditorMode: Identifiable {
     }
 }
 
-/// Sheet for creating/editing a custom refinement profile: a name plus a prompt
-/// that drives the cleanup tone. Save/Delete route through `AppSettings`.
+/// Sheet for creating/editing a custom profile (name + prompt). Shared by the
+/// refinement and speech-summary profile lists — save/delete route through the
+/// callbacks the call site provides.
 struct CustomProfileEditor: View {
-    @ObservedObject var settings: AppSettings
     let mode: ProfileEditorMode
+    let caption: String
+    let onSave: (UUID?, String, String) -> Void
+    let onDelete: (UUID) -> Void
 
     @Environment(\.dismiss) private var dismiss
 
     @State private var name: String
     @State private var prompt: String
 
-    init(settings: AppSettings, mode: ProfileEditorMode) {
-        self.settings = settings
+    init(
+        mode: ProfileEditorMode,
+        caption: String,
+        onSave: @escaping (UUID?, String, String) -> Void,
+        onDelete: @escaping (UUID) -> Void
+    ) {
         self.mode = mode
+        self.caption = caption
+        self.onSave = onSave
+        self.onDelete = onDelete
         switch mode {
         case .new:
             _name = State(initialValue: "")
@@ -69,7 +79,7 @@ struct CustomProfileEditor: View {
                         RoundedRectangle(cornerRadius: 6, style: .continuous)
                             .stroke(Color(nsColor: .separatorColor), lineWidth: 1)
                     )
-                Text("Describe the tone and style, e.g. \"Rewrite as terse lowercase Slack messages, no emoji.\" It becomes the tone profile for cleanup.")
+                Text(caption)
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
@@ -78,7 +88,7 @@ struct CustomProfileEditor: View {
             HStack {
                 if let editingID {
                     Button(role: .destructive) {
-                        settings.deleteCustomProfile(editingID)
+                        onDelete(editingID)
                         dismiss()
                     } label: {
                         Text("Delete")
@@ -91,7 +101,7 @@ struct CustomProfileEditor: View {
                     .keyboardShortcut(.cancelAction)
 
                 Button("Save") {
-                    settings.upsertCustomProfile(id: editingID, name: name, prompt: prompt)
+                    onSave(editingID, name, prompt)
                     dismiss()
                 }
                 .keyboardShortcut(.defaultAction)
