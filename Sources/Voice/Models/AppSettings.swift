@@ -535,7 +535,7 @@ final class AppSettings: ObservableObject {
     // MARK: - Speech summary profile resolution
 
     /// The proven spoken-summary prompt from the session-speech handoff design.
-    static let defaultSpeechSummaryPrompt = "Summarize the assistant reply above in natural SPOKEN sentences (it will be read aloud) — normally one or two, more only if the content truly needs it. Lead with the outcome, mention any question the assistant asked. If the reply contains code, file paths, symbols, or directory structures, describe what they mean or do in plain spoken language instead of reading them literally — never spell out syntax, punctuation, or paths aloud. Plain text only. Always write in English."
+    static let defaultSpeechSummaryPrompt = "Summarize the assistant reply in natural SPOKEN sentences — it will be read aloud. Use one or two sentences, three or more only when the content truly needs it. Describe only what the reply itself says: never add information, guesses, opinions, or context that is not in the reply. Lead with the outcome, and mention any question the assistant asked. When the reply contains code, file paths, commands, symbols, or directory structures, say what they do in plain spoken words instead of reading them literally — never spell out syntax, punctuation, or paths aloud. Plain text only. Always write in English."
 
     var resolvedSpeechSummaryPrompt: String {
         selectedSpeechProfile?.prompt ?? Self.defaultSpeechSummaryPrompt
