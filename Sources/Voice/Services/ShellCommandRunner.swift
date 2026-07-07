@@ -7,7 +7,7 @@ struct CommandResult {
 }
 
 struct ShellCommandRunner: Sendable {
-    func run(executable: String, arguments: [String], timeout: TimeInterval? = nil) async throws -> CommandResult {
+    func run(executable: String, arguments: [String], timeout: TimeInterval? = nil, environment: [String: String]? = nil) async throws -> CommandResult {
         let executable = (executable.trimmingCharacters(in: .whitespacesAndNewlines) as NSString).expandingTildeInPath
         let toolName = URL(fileURLWithPath: executable).lastPathComponent
 
@@ -21,6 +21,10 @@ struct ShellCommandRunner: Sendable {
                     let process = Process()
                     process.executableURL = URL(fileURLWithPath: executable)
                     process.arguments = arguments
+                    if let environment {
+                        process.environment = ProcessInfo.processInfo.environment
+                            .merging(environment) { _, override in override }
+                    }
 
                     let stdinPipe = Pipe()
                     stdinPipe.fileHandleForWriting.closeFile()
