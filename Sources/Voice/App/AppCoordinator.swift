@@ -12,6 +12,7 @@ final class AppCoordinator: ObservableObject {
     let settings: AppSettings
     let modelLibrary: ModelLibrary
     let updater: UpdaterService
+    let sessionSpeech: SessionSpeechService
 
     private let permissionService: PermissionService
     private let audioCaptureService: AudioCaptureService
@@ -47,6 +48,7 @@ final class AppCoordinator: ObservableObject {
         self.llamaRefiner = llamaRefiner
         self.insertionService = insertionService
         self.overlayController = overlayController
+        self.sessionSpeech = SessionSpeechService(settings: settings)
         self.permissions = permissionService.snapshot()
 
         settings.autoHealToolPaths()
