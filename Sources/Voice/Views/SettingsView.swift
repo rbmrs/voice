@@ -5,6 +5,7 @@ private enum SettingsSection: String, CaseIterable, Identifiable {
     case general
     case transcription
     case refinement
+    case speech
     case updates
 
     var id: String { rawValue }
@@ -17,6 +18,8 @@ private enum SettingsSection: String, CaseIterable, Identifiable {
             "Transcription"
         case .refinement:
             "Refinement"
+        case .speech:
+            "Speech"
         case .updates:
             "Updates"
         }
@@ -30,6 +33,8 @@ private enum SettingsSection: String, CaseIterable, Identifiable {
             "waveform"
         case .refinement:
             "wand.and.stars"
+        case .speech:
+            "person.wave.2"
         case .updates:
             "arrow.triangle.2.circlepath"
         }
@@ -87,6 +92,13 @@ struct SettingsView: View {
             TranscriptionSettingsView(settings: settings, modelLibrary: modelLibrary)
         case .refinement:
             RefinementSettingsView(settings: settings, modelLibrary: modelLibrary)
+        case .speech:
+            SpeechSettingsView(
+                settings: settings,
+                modelLibrary: modelLibrary,
+                monitor: coordinator.sessionSpeech.monitor,
+                player: coordinator.sessionSpeech.player
+            )
         case .updates:
             UpdatesSettingsView(updater: coordinator.updater)
         }
