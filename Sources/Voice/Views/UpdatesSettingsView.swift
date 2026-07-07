@@ -43,10 +43,12 @@ struct UpdatesSettingsView: View {
 
                     Spacer(minLength: 12)
 
-                    Button("Check for Updates…") {
-                        updater.checkForUpdates()
+                    if showsCheckButton {
+                        Button("Check for Updates…") {
+                            updater.checkForUpdates()
+                        }
+                        .disabled(!updater.canCheckForUpdates)
                     }
-                    .disabled(!updater.canCheckForUpdates)
                 }
             }
         }
@@ -79,14 +81,22 @@ struct UpdatesSettingsView: View {
                 Text("Voice is up to date.").foregroundStyle(.secondary)
             }
 
-        case .available(let version):
-            HStack(spacing: 8) {
-                Image(systemName: "arrow.down.circle.fill").foregroundStyle(.blue)
-                Text("Version \(version) is available.")
-                Spacer(minLength: 12)
-                Button("Not Now") { updater.dismissUpdate() }
-                Button("Install Update") { updater.installUpdate() }
-                    .keyboardShortcut(.defaultAction)
+        case .available(let version, let notes):
+            VStack(alignment: .leading, spacing: 4) {
+                HStack(spacing: 8) {
+                    Image(systemName: "arrow.down.circle.fill").foregroundStyle(.blue)
+                    Text("Version \(version) is available.")
+                    Spacer(minLength: 12)
+                    Button("Not Now") { updater.dismissUpdate() }
+                    Button("Install Update") { updater.installUpdate() }
+                        .keyboardShortcut(.defaultAction)
+                }
+                if let notes, !notes.isEmpty {
+                    Text(notes)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(3)
+                }
             }
 
         case .downloading(let fraction):
@@ -134,6 +144,17 @@ struct UpdatesSettingsView: View {
             } else {
                 ProgressView().progressViewStyle(.linear)
             }
+        }
+    }
+
+    /// Hidden once an update's already been found — the inline card above is the call to action,
+    /// a second "check" button next to it would be redundant.
+    private var showsCheckButton: Bool {
+        switch updater.phase {
+        case .idle, .checking, .upToDate, .failed:
+            return true
+        case .available, .downloading, .extracting, .readyToInstall, .installing:
+            return false
         }
     }
 
