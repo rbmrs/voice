@@ -57,6 +57,10 @@ final class AppCoordinator: ObservableObject {
         if updater.automaticallyUpdates {
             updater.checkForUpdatesInBackground()
         }
+
+        #if DEBUG
+        assertRepetitionCollapseWorks()
+        #endif
     }
 
     var canStart: Bool {
@@ -200,7 +204,9 @@ final class AppCoordinator: ObservableObject {
 
         do {
             let rawText = stripWhisperHallucinations(
-                try await transcriber.transcribe(audioURL: audioURL, settings: settings)
+                collapseRepeatedRuns(
+                    try await transcriber.transcribe(audioURL: audioURL, settings: settings)
+                )
             )
             try Task.checkCancellation()
 
@@ -342,3 +348,86 @@ final class AppCoordinator: ObservableObject {
         }
     }
 }
+
+// MARK: - Repetition collapse
+
+/// Collapses *consecutive* repeated tokens and phrases that whisper.cpp emits as runaway loops
+/// (e.g. "it it it it" or "the way we're getting the way we're getting"). Only adjacent repeats
+/// are collapsed, so legitimate non-adjacent repetition is left untouched. This is the
+/// deterministic safety net for loops the decoder's own guards (entropy-thold + temperature
+/// fallback) miss — whisper.cpp has no compression-ratio check, so long loops still slip through.
+func collapseRepeatedRuns(_ text: String) -> String {
+    // Intra-token hyphen loops first ("a-it-it-it-it" -> "a-it"): whisper sometimes joins a
+    // repeated token with hyphens, hiding it inside one whitespace token. >=3 occurrences
+    // required, so legit hyphenated words ("well-being", "state-of-the-art") are untouched.
+    var input = text
+    if let hyphenLoop = try? NSRegularExpression(pattern: #"\b(\w+)(?:[-–]\1){2,}\b"#, options: [.caseInsensitive]) {
+        input = hyphenLoop.stringByReplacingMatches(
+            in: input, range: NSRange(input.startIndex..., in: input), withTemplate: "$1")
+    }
+    var tokens = input.split(whereSeparator: { $0.isWhitespace }).map(String.init)
+    guard tokens.count > 1 else { return input }
+
+    // Comparison key only: lowercase and strip surrounding punctuation so "three." == "three".
+    // Output always keeps the first occurrence's original token (casing + punctuation).
+    func key(_ token: String) -> String {
+        token.lowercased().trimmingCharacters(in: CharacterSet.alphanumerics.inverted)
+    }
+    var keys = tokens.map(key)
+
+    func collapse(blockSize n: Int, minRepeats: Int) {
+        guard tokens.count >= n * minRepeats else { return }
+        var outTokens: [String] = []
+        var outKeys: [String] = []
+        var i = 0
+        while i < tokens.count {
+            if i + n <= tokens.count {
+                let blockKeys = Array(keys[i ..< i + n])
+                var reps = 1
+                var j = i + n
+                while j + n <= tokens.count, Array(keys[j ..< j + n]) == blockKeys {
+                    reps += 1
+                    j += n
+                }
+                if reps >= minRepeats {
+                    outTokens.append(contentsOf: tokens[i ..< i + n])
+                    outKeys.append(contentsOf: keys[i ..< i + n])
+                    i = j
+                    continue
+                }
+            }
+            outTokens.append(tokens[i])
+            outKeys.append(keys[i])
+            i += 1
+        }
+        tokens = outTokens
+        keys = outKeys
+    }
+
+    // Single-token loops first (threshold 3 keeps legit doubles like "no no" / "had had").
+    collapse(blockSize: 1, minRepeats: 3)
+    // Then phrase loops, longest first. n>=3 collapses at 2 repeats; a 2-word phrase needs 3
+    // repeats so emphatic "come on come on" survives.
+    var n = min(30, tokens.count / 2)
+    while n >= 2 {
+        collapse(blockSize: n, minRepeats: n >= 3 ? 2 : 3)
+        n -= 1
+    }
+
+    let collapsed = tokens.joined(separator: " ")
+    return collapsed.isEmpty ? input : collapsed
+}
+
+#if DEBUG
+/// One runnable check for collapseRepeatedRuns — runs on every debug launch (AppCoordinator.init).
+func assertRepetitionCollapseWorks() {
+    assert(collapseRepeatedRuns("it it it it it it") == "it")
+    assert(collapseRepeatedRuns("the way that we're getting the way that we're getting right now")
+        == "the way that we're getting right now")
+    assert(collapseRepeatedRuns("no no it's fine") == "no no it's fine")
+    assert(collapseRepeatedRuns("I had had enough") == "I had had enough")
+    assert(collapseRepeatedRuns("a-it-it-it-it-it") == "a-it")
+    assert(collapseRepeatedRuns("well-being state-of-the-art") == "well-being state-of-the-art")
+    assert(collapseRepeatedRuns("hello world") == "hello world")
+}
+#endif

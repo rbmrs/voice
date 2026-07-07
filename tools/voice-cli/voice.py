@@ -1762,6 +1762,7 @@ def transcribe_audio(
             "--output-file",
             output_base,
             "--no-timestamps",
+            "--suppress-nst",
             "--language",
             language,
             "--threads",
@@ -1795,10 +1796,67 @@ def transcribe_audio(
         else:
             transcript = result.stdout
 
-    cleaned = transcript.strip()
+    cleaned = collapse_repeated_runs(transcript.strip())
     if not cleaned:
         raise VoiceCliError("whisper-cli produced an empty transcript.")
     return cleaned
+
+
+def collapse_repeated_runs(text: str) -> str:
+    """Collapse *consecutive* repeated tokens/phrases that whisper.cpp emits as runaway loops
+    (e.g. "it it it it" or "the way we're getting the way we're getting"). Only adjacent repeats
+    are collapsed, so legitimate non-adjacent repetition is untouched. Deterministic safety net
+    for loops the decoder's own guards (entropy-thold + temperature fallback) fail to catch."""
+    # Intra-token hyphen loops first ("a-it-it-it-it" -> "a-it"): whisper sometimes joins a
+    # repeated token with hyphens, hiding it inside one whitespace token. >=3 occurrences
+    # required, so legit hyphenated words ("well-being", "state-of-the-art") are untouched.
+    text = re.sub(r"\b(\w+)(?:[-–]\1){2,}\b", r"\1", text, flags=re.IGNORECASE)
+    tokens = text.split()
+    if len(tokens) < 2:
+        return text
+
+    def key(token: str) -> str:
+        # Compare on lowercase with surrounding punctuation stripped ("three." == "three");
+        # internal apostrophes and accented letters survive (\w is Unicode-aware for str).
+        return re.sub(r"^\W+|\W+$", "", token.lower())
+
+    keys = [key(t) for t in tokens]
+
+    def collapse(n: int, min_repeats: int) -> None:
+        nonlocal tokens, keys
+        if len(tokens) < n * min_repeats:
+            return
+        out_tokens: list[str] = []
+        out_keys: list[str] = []
+        i = 0
+        while i < len(tokens):
+            if i + n <= len(tokens):
+                block = keys[i : i + n]
+                reps = 1
+                j = i + n
+                while j + n <= len(tokens) and keys[j : j + n] == block:
+                    reps += 1
+                    j += n
+                if reps >= min_repeats:
+                    out_tokens.extend(tokens[i : i + n])
+                    out_keys.extend(keys[i : i + n])
+                    i = j
+                    continue
+            out_tokens.append(tokens[i])
+            out_keys.append(keys[i])
+            i += 1
+        tokens = out_tokens
+        keys = out_keys
+
+    # Single-token loops first (threshold 3 keeps legit doubles like "no no" / "had had").
+    collapse(1, 3)
+    # Then phrase loops, longest first; n>=3 collapses at 2 repeats, 2-word phrases need 3
+    # so emphatic "come on come on" survives.
+    for n in range(min(30, len(tokens) // 2), 1, -1):
+        collapse(n, 2 if n >= 3 else 3)
+
+    collapsed = " ".join(tokens)
+    return collapsed if collapsed else text
 
 
 def heuristic_refine(text: str) -> str:
@@ -4311,20 +4369,20 @@ def add_whisper_decode_args(parser: argparse.ArgumentParser) -> None:
     parser.add_argument(
         "--whisper-beam-size",
         type=int,
-        default=1,
-        help="Beam size for whisper.cpp decoding. Lower is faster; upstream default is 5.",
+        default=5,
+        help="Beam size for whisper.cpp decoding. Matches upstream default (5); pass 1 for faster greedy decode at the cost of more hallucination.",
     )
     parser.add_argument(
         "--whisper-best-of",
         type=int,
-        default=1,
-        help="Best-of candidates for whisper.cpp decoding. Lower is faster; upstream default is 5.",
+        default=5,
+        help="Best-of candidates for whisper.cpp decoding. Matches upstream default (5); lower is faster.",
     )
     parser.add_argument(
         "--whisper-fallback",
         action=argparse.BooleanOptionalAction,
-        default=False,
-        help="Allow whisper.cpp temperature fallback retries. Disabled by default for faster dictation.",
+        default=True,
+        help="Allow whisper.cpp temperature fallback retries. On by default: it is whisper's built-in escape from repetition loops. Pass --no-whisper-fallback for faster (loop-prone) decoding.",
     )
     parser.add_argument(
         "--whisper-max-context",
