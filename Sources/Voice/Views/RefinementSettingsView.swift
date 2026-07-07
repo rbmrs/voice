@@ -32,7 +32,12 @@ struct RefinementSettingsView: View {
             }
         }
         .sheet(item: $editorMode) { mode in
-            CustomProfileEditor(settings: settings, mode: mode)
+            CustomProfileEditor(
+                mode: mode,
+                caption: "Describe the tone and style, e.g. \"Rewrite as terse lowercase Slack messages, no emoji.\" It becomes the tone profile for cleanup.",
+                onSave: { settings.upsertCustomProfile(id: $0, name: $1, prompt: $2) },
+                onDelete: { settings.deleteCustomProfile($0) }
+            )
         }
     }
 
