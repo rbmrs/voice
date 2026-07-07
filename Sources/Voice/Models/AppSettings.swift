@@ -76,6 +76,41 @@ enum RefinementBackend: String, CaseIterable, Identifiable {
     }
 }
 
+enum SpeechReplyStyle: String, CaseIterable, Identifiable {
+    case summary
+    case full
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .summary:
+            "Summary"
+        case .full:
+            "Full Reply"
+        }
+    }
+}
+
+enum SpeechSummaryModel: String, CaseIterable, Identifiable {
+    case haiku
+    case sonnet
+    case local
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .haiku:
+            "Haiku"
+        case .sonnet:
+            "Sonnet"
+        case .local:
+            "Local"
+        }
+    }
+}
+
 // `RefinementProfile` is generated from Resources/refinement-contract.json
 // into Sources/Voice/Generated/RefinementContract.swift — the shared
 // refinement contract both this app and tools/voice-cli/voice.py derive from.
@@ -138,6 +173,13 @@ final class AppSettings: ObservableObject {
     @Published var selectedCustomProfileID: UUID?
     @Published var llamaExecutablePath: String
     @Published var llamaModelPath: String
+    @Published var speechReplyStyle: SpeechReplyStyle
+    @Published var speechSummaryModel: SpeechSummaryModel
+    @Published var speechProfiles: [CustomProfile]
+    @Published var selectedSpeechProfileID: UUID?
+    @Published var speechLlamaModelPath: String
+    @Published var speakSessionReplies: Bool
+    @Published var mutedSpeechSessionIDs: Set<String>
 
     var isWhisperConfigured: Bool {
         whisperConfigurationIssue == nil
@@ -321,6 +363,15 @@ final class AppSettings: ObservableObject {
         selectedCustomProfileID = loadedProfiles.contains { $0.id == storedSelectedID } ? storedSelectedID : nil
         llamaExecutablePath = defaults.string(forKey: Keys.llamaExecutablePath.rawValue) ?? Self.defaultExecutablePath(named: "llama-cli")
         llamaModelPath = defaults.string(forKey: Keys.llamaModelPath.rawValue) ?? ""
+        speechReplyStyle = SpeechReplyStyle(rawValue: defaults.string(forKey: Keys.speechReplyStyle.rawValue) ?? "") ?? .summary
+        speechSummaryModel = SpeechSummaryModel(rawValue: defaults.string(forKey: Keys.speechSummaryModel.rawValue) ?? "") ?? .sonnet
+        let loadedSpeechProfiles = Self.decodeCustomProfiles(defaults.data(forKey: Keys.speechProfiles.rawValue))
+        speechProfiles = loadedSpeechProfiles
+        let storedSpeechProfileID = defaults.string(forKey: Keys.selectedSpeechProfileID.rawValue).flatMap(UUID.init(uuidString:))
+        selectedSpeechProfileID = loadedSpeechProfiles.contains { $0.id == storedSpeechProfileID } ? storedSpeechProfileID : nil
+        speechLlamaModelPath = defaults.string(forKey: Keys.speechLlamaModelPath.rawValue) ?? ""
+        speakSessionReplies = defaults.object(forKey: Keys.speakSessionReplies.rawValue) as? Bool ?? false
+        mutedSpeechSessionIDs = Set(defaults.stringArray(forKey: Keys.mutedSpeechSessionIDs.rawValue) ?? [])
 
         bind()
     }
@@ -396,6 +447,36 @@ final class AppSettings: ObservableObject {
         $llamaModelPath
             .sink { [defaults] in defaults.set($0, forKey: Keys.llamaModelPath.rawValue) }
             .store(in: &cancellables)
+
+        $speechReplyStyle
+            .map(\.rawValue)
+            .sink { [defaults] in defaults.set($0, forKey: Keys.speechReplyStyle.rawValue) }
+            .store(in: &cancellables)
+
+        $speechSummaryModel
+            .map(\.rawValue)
+            .sink { [defaults] in defaults.set($0, forKey: Keys.speechSummaryModel.rawValue) }
+            .store(in: &cancellables)
+
+        $speechProfiles
+            .sink { [defaults] in defaults.set(try? JSONEncoder().encode($0), forKey: Keys.speechProfiles.rawValue) }
+            .store(in: &cancellables)
+
+        $selectedSpeechProfileID
+            .sink { [defaults] in defaults.set($0?.uuidString, forKey: Keys.selectedSpeechProfileID.rawValue) }
+            .store(in: &cancellables)
+
+        $speechLlamaModelPath
+            .sink { [defaults] in defaults.set($0, forKey: Keys.speechLlamaModelPath.rawValue) }
+            .store(in: &cancellables)
+
+        $speakSessionReplies
+            .sink { [defaults] in defaults.set($0, forKey: Keys.speakSessionReplies.rawValue) }
+            .store(in: &cancellables)
+
+        $mutedSpeechSessionIDs
+            .sink { [defaults] in defaults.set(Array($0), forKey: Keys.mutedSpeechSessionIDs.rawValue) }
+            .store(in: &cancellables)
     }
 
     // MARK: - Refinement profile resolution
@@ -448,6 +529,71 @@ final class AppSettings: ObservableObject {
         customProfiles.removeAll { $0.id == id }
         if selectedCustomProfileID == id {
             selectedCustomProfileID = nil
+        }
+    }
+
+    // MARK: - Speech summary profile resolution
+
+    /// The proven spoken-summary prompt from the session-speech handoff design.
+    static let defaultSpeechSummaryPrompt = "Summarize the assistant reply above in natural SPOKEN sentences (it will be read aloud) — normally one or two, more only if the content truly needs it. Lead with the outcome, mention any question the assistant asked. If the reply contains code, file paths, symbols, or directory structures, describe what they mean or do in plain spoken language instead of reading them literally — never spell out syntax, punctuation, or paths aloud. Plain text only. Always write in English."
+
+    var resolvedSpeechSummaryPrompt: String {
+        selectedSpeechProfile?.prompt ?? Self.defaultSpeechSummaryPrompt
+    }
+
+    /// The speech sandbox picks its own GGUF, independent of refinement's `llamaModelPath`.
+    var speechLlamaModelValidation: PathValidation {
+        Self.validateFile(path: speechLlamaModelPath, displayName: "Speech summary model", preferredExtension: "gguf")
+    }
+
+    var isSpeechLlamaConfigured: Bool {
+        !llamaExecutableValidation.isBlocking && !speechLlamaModelValidation.isBlocking
+    }
+
+    /// Sessions are tracked (spoken) by default; muting is per-session opt-out.
+    func isSessionTracked(_ id: String) -> Bool {
+        !mutedSpeechSessionIDs.contains(id)
+    }
+
+    func setSessionTracked(_ id: String, _ tracked: Bool) {
+        if tracked {
+            mutedSpeechSessionIDs.remove(id)
+        } else {
+            mutedSpeechSessionIDs.insert(id)
+        }
+    }
+
+    var selectedSpeechProfile: CustomProfile? {
+        guard let id = selectedSpeechProfileID else { return nil }
+        return speechProfiles.first { $0.id == id }
+    }
+
+    var selectedSpeechProfileTitle: String {
+        selectedSpeechProfile?.name ?? "Default"
+    }
+
+    @discardableResult
+    func upsertSpeechProfile(id: UUID?, name: String, prompt: String) -> UUID {
+        let trimmedName = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmedPrompt = prompt.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        if let id, let index = speechProfiles.firstIndex(where: { $0.id == id }) {
+            speechProfiles[index].name = trimmedName
+            speechProfiles[index].prompt = trimmedPrompt
+            selectedSpeechProfileID = id
+            return id
+        }
+
+        let profile = CustomProfile(name: trimmedName, prompt: trimmedPrompt)
+        speechProfiles.append(profile)
+        selectedSpeechProfileID = profile.id
+        return profile.id
+    }
+
+    func deleteSpeechProfile(_ id: UUID) {
+        speechProfiles.removeAll { $0.id == id }
+        if selectedSpeechProfileID == id {
+            selectedSpeechProfileID = nil
         }
     }
 
@@ -569,5 +715,12 @@ final class AppSettings: ObservableObject {
         case selectedCustomProfileID
         case llamaExecutablePath
         case llamaModelPath
+        case speechReplyStyle
+        case speechSummaryModel
+        case speechProfiles
+        case selectedSpeechProfileID
+        case speechLlamaModelPath
+        case speakSessionReplies
+        case mutedSpeechSessionIDs
     }
 }
