@@ -27,6 +27,16 @@ final class WhisperCppTranscriber: SpeechTranscribing {
             "--output-file", outputBase.path,
             "--no-prints",
             "--no-timestamps",
+            // Anti-hallucination decoder settings (whisper.cpp 1.9.x). beam-size/best-of
+            // match the binary defaults but are explicit so a future build can't silently
+            // drop to greedy. suppress-nst drops non-speech tokens whisper otherwise emits
+            // as filler. max-context 0 stops a degraded 30s window from poisoning the next
+            // via prompt carry-over — the cause of cross-window phrase loops and semantic
+            // drift. Temperature fallback stays on (default) as the built-in loop escape.
+            "--beam-size", "5",
+            "--best-of", "5",
+            "--suppress-nst",
+            "--max-context", "0",
         ]
 
         arguments.append(contentsOf: ["--language", settings.effectiveWhisperLanguage])
