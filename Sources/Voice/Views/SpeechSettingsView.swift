@@ -51,6 +51,22 @@ struct SpeechSettingsView: View {
                 .font(.caption)
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
+
+            SettingsRowDivider()
+
+            SettingsRow(title: "Speak Steps") {
+                TrailingControlColumn(width: controlColumnWidth) {
+                    Toggle("", isOn: $settings.speakIntermediateSteps)
+                        .labelsHidden()
+                        .toggleStyle(.switch)
+                        .disabled(!settings.speakSessionReplies)
+                }
+            }
+
+            Text("When on, in-progress messages are spoken as they happen. When off, only the final reply of each turn is announced.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
         }
     }
 
