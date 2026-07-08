@@ -67,11 +67,17 @@ final class SessionSpeechService: ObservableObject {
                 continue
             }
 
-            // A turn in progress appends to the transcript continuously (tool calls,
-            // interleaved text). Announce only after a few seconds of quiet — the
-            // polling equivalent of the Stop hook firing at turn end. Don't advance
-            // the tail yet: the reply gets announced on a later tick once quiet.
-            guard Date().timeIntervalSince(session.lastActivity) > 4 else { continue }
+            if settings.speakIntermediateSteps {
+                // Steps mode: any changed text speaks, debounced by a few seconds of
+                // transcript quiet so rapid-fire steps don't stack up. The tail isn't
+                // advanced on skip — the text gets announced on a later, quieter tick.
+                guard Date().timeIntervalSince(session.lastActivity) > 4 else { continue }
+            } else {
+                // Final-only mode: stop_reason marks the turn's last message precisely,
+                // so announce immediately; step text stays pending until the final
+                // reply replaces it (tail unadvanced).
+                guard session.lastReplyIsFinal else { continue }
+            }
             lastSpokenTail[session.id] = tail
 
             let llama = ReplySummarizer.LlamaConfiguration(
@@ -91,7 +97,12 @@ final class SessionSpeechService: ObservableObject {
                 spoken = reply
             }
 
-            player.speak(spoken, id: session.id)
+            // With several sessions live, lead with which project is talking.
+            let announced = sessions.count > 1
+                ? "In \(URL(fileURLWithPath: session.projectPath).lastPathComponent): \(spoken)"
+                : spoken
+
+            player.speak(announced, id: session.id)
             // Serialize audio: wait for this announcement to finish before the next.
             while player.speakingID == session.id {
                 try? await Task.sleep(for: .milliseconds(250))
