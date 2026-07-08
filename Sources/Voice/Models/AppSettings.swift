@@ -179,6 +179,7 @@ final class AppSettings: ObservableObject {
     @Published var selectedSpeechProfileID: UUID?
     @Published var speechLlamaModelPath: String
     @Published var speakSessionReplies: Bool
+    @Published var speakIntermediateSteps: Bool
     @Published var mutedSpeechSessionIDs: Set<String>
 
     var isWhisperConfigured: Bool {
@@ -371,6 +372,7 @@ final class AppSettings: ObservableObject {
         selectedSpeechProfileID = loadedSpeechProfiles.contains { $0.id == storedSpeechProfileID } ? storedSpeechProfileID : nil
         speechLlamaModelPath = defaults.string(forKey: Keys.speechLlamaModelPath.rawValue) ?? ""
         speakSessionReplies = defaults.object(forKey: Keys.speakSessionReplies.rawValue) as? Bool ?? false
+        speakIntermediateSteps = defaults.object(forKey: Keys.speakIntermediateSteps.rawValue) as? Bool ?? false
         mutedSpeechSessionIDs = Set(defaults.stringArray(forKey: Keys.mutedSpeechSessionIDs.rawValue) ?? [])
 
         bind()
@@ -472,6 +474,10 @@ final class AppSettings: ObservableObject {
 
         $speakSessionReplies
             .sink { [defaults] in defaults.set($0, forKey: Keys.speakSessionReplies.rawValue) }
+            .store(in: &cancellables)
+
+        $speakIntermediateSteps
+            .sink { [defaults] in defaults.set($0, forKey: Keys.speakIntermediateSteps.rawValue) }
             .store(in: &cancellables)
 
         $mutedSpeechSessionIDs
@@ -721,6 +727,7 @@ final class AppSettings: ObservableObject {
         case selectedSpeechProfileID
         case speechLlamaModelPath
         case speakSessionReplies
+        case speakIntermediateSteps
         case mutedSpeechSessionIDs
     }
 }
