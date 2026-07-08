@@ -1,11 +1,13 @@
+import Darwin
 import Foundation
 
 /// A Claude Code session considered "live" — its transcript was modified recently.
 struct LiveSession: Identifiable, Equatable {
-    let id: String          // session UUID (transcript filename)
-    let projectPath: String // cwd read from inside the transcript
-    let lastActivity: Date  // transcript file mtime
-    let lastReply: String?  // last assistant text message, if any
+    let id: String               // session UUID (transcript filename)
+    let projectPath: String      // cwd read from inside the transcript
+    let lastActivity: Date       // transcript file mtime
+    let lastReply: String?       // last assistant text message, if any
+    let lastReplyIsFinal: Bool   // end of a turn (stop_reason) vs an in-progress step
 }
 
 /// Lists live Claude Code sessions by scanning `~/.claude/projects/*/*.jsonl` for
@@ -36,7 +38,13 @@ final class ClaudeSessionMonitor: ObservableObject {
             return
         }
 
+        // Directories where a claude process is actually running — a recently-modified
+        // transcript whose session was exited shouldn't linger in the list. Empty set =
+        // discovery failed (exotic install); fall back to the mtime window alone.
+        let activeDirs = Self.activeClaudeWorkingDirectories()
+
         var found: [LiveSession] = []
+        var seenIDs: Set<String> = []
         for dir in projectDirs {
             guard let transcripts = try? fm.contentsOfDirectory(
                 at: dir,
@@ -55,11 +63,23 @@ final class ClaudeSessionMonitor: ObservableObject {
                 // Only interactive sessions ("cli") are live sessions; unknown → keep (defensive).
                 if let entrypoint = head.entrypoint, entrypoint != "cli" { continue }
 
+                let projectPath = head.cwd ?? fallbackPath(fromDashedDirectory: dir.lastPathComponent)
+
+                // Exited session: transcript still fresh but no claude process in its directory.
+                // ponytail: cwd-level granularity — an exited session sharing a directory with a
+                // live one lingers until the mtime window ages it out.
+                if !activeDirs.isEmpty, !activeDirs.contains(projectPath) { continue }
+
+                let id = file.deletingPathExtension().lastPathComponent
+                guard seenIDs.insert(id).inserted else { continue }
+
+                let reply = lastAssistantText(inTranscript: file)
                 found.append(LiveSession(
-                    id: file.deletingPathExtension().lastPathComponent,
-                    projectPath: head.cwd ?? fallbackPath(fromDashedDirectory: dir.lastPathComponent),
+                    id: id,
+                    projectPath: projectPath,
                     lastActivity: mtime,
-                    lastReply: lastAssistantText(inTranscript: file)
+                    lastReply: reply?.text,
+                    lastReplyIsFinal: reply?.isFinal ?? false
                 ))
             }
         }
@@ -95,7 +115,7 @@ final class ClaudeSessionMonitor: ObservableObject {
     /// run in forked sdk-cli sessions the monitor filters out, so their result only
     /// surfaces here). Reads only the file's tail — transcripts grow to several MB and
     /// a turn's final text arrives as one line. Same defensive parsing as `projectPath`.
-    private func lastAssistantText(inTranscript url: URL) -> String? {
+    private func lastAssistantText(inTranscript url: URL) -> (text: String, isFinal: Bool)? {
         guard let handle = try? FileHandle(forReadingFrom: url) else { return nil }
         defer { try? handle.close() }
 
@@ -121,7 +141,11 @@ final class ClaudeSessionMonitor: ObservableObject {
                     .joined()
                     .trimmingCharacters(in: .whitespacesAndNewlines)
                 if !reply.isEmpty {
-                    return reply
+                    // "tool_use" = in-progress step text (more tool calls follow); anything
+                    // else — end_turn, stop_sequence, or a missing/unknown value — counts
+                    // as final so a transcript-format change fails toward speaking.
+                    let isFinal = (message["stop_reason"] as? String) != "tool_use"
+                    return (reply, isFinal)
                 }
 
             case "user":
@@ -139,8 +163,9 @@ final class ClaudeSessionMonitor: ObservableObject {
                     .replacingOccurrences(of: "<local-command-stdout>", with: "")
                     .replacingOccurrences(of: "</local-command-stdout>", with: "")
                     .trimmingCharacters(in: .whitespacesAndNewlines)
-                if !stripped.isEmpty {
-                    return stripped
+                // Claude Code writes "(no content)" for commands with no output.
+                if !stripped.isEmpty, stripped != "(no content)" {
+                    return (stripped, true) // command finished — inherently final
                 }
 
             default:
@@ -154,5 +179,31 @@ final class ClaudeSessionMonitor: ObservableObject {
     /// when no cwd entry exists in the first 20 lines.
     private func fallbackPath(fromDashedDirectory name: String) -> String {
         name.replacingOccurrences(of: "-", with: "/")
+    }
+
+    /// Working directories of running `claude` processes, via libproc (no subprocesses).
+    /// The CLI's executable lives at ~/.local/share/claude/versions/<x.y.z>, so match
+    /// "claude" as a path component rather than the process name (which is "<x.y.z>").
+    private static func activeClaudeWorkingDirectories() -> Set<String> {
+        var pids = [pid_t](repeating: 0, count: 8_192)
+        let count = Int(proc_listallpids(&pids, Int32(pids.count * MemoryLayout<pid_t>.size)))
+        guard count > 0 else { return [] }
+
+        var directories: Set<String> = []
+        for pid in pids[0..<min(count, pids.count)] where pid > 0 {
+            var pathBuffer = [CChar](repeating: 0, count: 4_096)
+            guard proc_pidpath(pid, &pathBuffer, UInt32(pathBuffer.count)) > 0 else { continue }
+            let executablePath = String(cString: pathBuffer)
+            guard URL(fileURLWithPath: executablePath).pathComponents.contains("claude") else { continue }
+
+            var info = proc_vnodepathinfo()
+            let size = Int32(MemoryLayout<proc_vnodepathinfo>.size)
+            guard proc_pidinfo(pid, PROC_PIDVNODEPATHINFO, 0, &info, size) > 0 else { continue }
+            let cwd = withUnsafePointer(to: &info.pvi_cdir.vip_path) {
+                $0.withMemoryRebound(to: CChar.self, capacity: Int(MAXPATHLEN)) { String(cString: $0) }
+            }
+            directories.insert(cwd)
+        }
+        return directories
     }
 }
