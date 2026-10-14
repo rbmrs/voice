@@ -211,8 +211,9 @@ struct SpeechSettingsView: View {
                                 .labelsHidden()
                                 .toggleStyle(.switch)
                                 .controlSize(.small)
-                                .disabled(!settings.speakSessionReplies)
-                                .help("Track this session — replies are only spoken for tracked sessions")
+                                .help(settings.speakSessionReplies
+                                    ? "Track this session — replies are only spoken for tracked sessions"
+                                    : "Track this session — replies will be spoken when Speak Claude Code Replies is on")
                         }
 
                         if let reply = session.lastReply {
@@ -261,6 +262,14 @@ struct SpeechSettingsView: View {
                     if session != monitor.sessions.last {
                         SettingsRowDivider()
                     }
+                }
+
+                if !settings.speakSessionReplies {
+                    SettingsRowDivider()
+                    Text("Auto-speak is paused. Tracked sessions will be spoken when Speak Claude Code Replies is turned on.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
             }
         }
