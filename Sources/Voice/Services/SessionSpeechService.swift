@@ -85,17 +85,19 @@ final class SessionSpeechService: ObservableObject {
                 modelPath: settings.speechLlamaModelPath,
                 isConfigured: settings.isSpeechLlamaConfigured
             )
-            let spoken: String
+            let rawSpoken: String
             if settings.speechReplyStyle == .summary {
-                spoken = await summarizer.spokenForm(
+                rawSpoken = await summarizer.spokenForm(
                     of: reply,
                     model: settings.speechSummaryModel,
                     prompt: settings.resolvedSpeechSummaryPrompt,
                     llama: llama
                 )
             } else {
-                spoken = reply
+                rawSpoken = reply
             }
+            let spoken = SpokenTextSanitizer.sanitize(rawSpoken)
+            guard !spoken.isEmpty else { continue }
 
             // With several sessions live, lead with which project is talking.
             let announced = sessions.count > 1
